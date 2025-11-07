@@ -1,24 +1,41 @@
 #include "homescreen.h"
 
 #include <stdio.h>
+#include <wiiuse/wpad.h>
 #include <mp3player.h>
 
 #include "../render.h"
 #include "../color.h"
+#include "screenManager.h"
+#include "gamelevel.h"
+#include "menu.h"
 
 static f32 camX;
 static f32 camY;
 static f32 velX;
-const static f32 defaultSpeed = 10.386f;
+
+static const f32 defaultSpeed = 5.0f;
 
 static const f32 viewScale = 1.5f;
+
+static void enterHomeScreen();
+static void exitHomeScreen();
+static void runHomeScreen(f32 deltaTime);
+static void renderHomeScreen();
+
+const GameState GAMESTATE_HOME = {
+    .enter = enterHomeScreen,
+    .exit = exitHomeScreen,
+    .run = runHomeScreen,
+    .render = renderHomeScreen
+};
 
 static s32 my_reader(void* cb_data, void* dst, s32 len) {
     FILE* f = (FILE*)cb_data;
     return fread(dst, 1, len, f);
 }
 
-void loadHomeScreen() {
+static void enterHomeScreen() {
     camX = 0.0f;
     camY = 120.0f;
     velX = defaultSpeed * 30.0f;
@@ -30,11 +47,24 @@ void loadHomeScreen() {
     }
 }
 
-void runHomeScreen() {
+static void exitHomeScreen() {
+    loadMenuTextures();
+    return;
+}
+
+static void runHomeScreen(f32 deltaTime) {
+    u32 pressed = WPAD_ButtonsDown(0);
+
+    if (pressed & WPAD_BUTTON_A) {
+        // loadLevel(1);
+        changeState(&GAMESTATE_MENU, 0.5f);
+    }
     const static f32 dt = 1.0f / 60.0f;
 
     camX += velX * dt;
+}
 
+static void renderHomeScreen() {
     GFX_ResetDrawMode();
 
     Mtx view;

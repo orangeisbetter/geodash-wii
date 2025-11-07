@@ -76,7 +76,7 @@ int main(int argc, char** argv) {
     // WPAD_SetPowerButtonCallback(wiimotePowerPressed);
 
     Mtx view;
-    Mtx model, modelView;
+    Mtx model;
 
     GX_SetCopyClear((GXColor){ 0x00, 0x00, 0x00, 0xff }, GX_MAX_Z24);
 
@@ -90,7 +90,8 @@ int main(int argc, char** argv) {
 
     WPAD_Init();
 
-    legalNotice(&font, &fontTexture, &HWButton);
+    // Legal notice, blocking call
+    // legalNotice(&font, &fontTexture, &HWButton);
 
     TPLFile backgroundTPL;
     if (TPL_OpenTPLFromFile(&backgroundTPL, ASSETS_PATH "background.tpl") != 1) {
@@ -100,9 +101,9 @@ int main(int argc, char** argv) {
     TPL_GetTexture(&backgroundTPL, 0, &backgroundTexture);
     // TPL_CloseTPLFile(&backgroundTPL);
 
+    // Loading screen
     for (int i = 0; i < 2; i++) {
-        // Draw background for loading screen
-        RDR_drawBackground(&backgroundTexture, 0.0, 0.0, 0.49f, 0x0066ffff);
+        RDR_drawBackground(&backgroundTexture, 0.0, 120.0, 0.49f, 0x0066ffff);
 
         // Position loading text 40px left of right edge, 40px above bottom edge
         guMtxIdentity(model);
@@ -149,25 +150,16 @@ int main(int argc, char** argv) {
     }
 
     TPL_GetTexture(&groundTPL, 0, &groundTexture);
-    // TPL_CloseTPLFile(&groundTPL);
 
     RDR_loadSpriteSheets();
 
     SYS_Report("Textures loaded. (%f ms)\n", ticks_to_microsecs(gettime() - start) / 1000.0f);
 
-    // start drawing home screen
-    screenManager.screenState = HOME;
+    // Set initial state to home (title) screen
+    changeState(&GAMESTATE_HOME, -1.0f);
 
-    loadHomeScreen();
-
-    int levelId;
-
-    // loadLevel(5);
-
+    // Main game loop
     while (HWButton == -1) {
-        // --------------------------------------------------------------------
-        // Process input
-        // --------------------------------------------------------------------
         WPAD_ScanPads();
         u32 pressed = WPAD_ButtonsDown(0);
 
@@ -175,34 +167,7 @@ int main(int argc, char** argv) {
             exit(0);
         }
 
-        switch (screenManager.screenState) {
-            case HOME:
-                if (pressed & WPAD_BUTTON_A) {
-                    changeScreen(MENU, 1000, 1000);
-                }
-                runHomeScreen();
-                break;
-            case MENU:
-                if (pressed & WPAD_BUTTON_A) {
-                    // transition out
-                    levelId = 1;
-                    MP3Player_Stop();
-                    if (loadLevel(levelId)) {
-                        // gameState = LEVEL;
-                    }
-                    // transition in
-                }
-                break;
-            case LEVEL:
-                runLevel(view, modelView, pressed);
-                break;
-
-            case SPRITE_SELECTION:
-
-                break;
-        }
-
-        updateScreen();
+        runState(1.0f / 60.0f);
 
         GX_DrawDone();
         GFX_SwapBuffers();

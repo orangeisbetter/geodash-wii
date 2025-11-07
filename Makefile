@@ -23,7 +23,7 @@ DATA		:=	data
 TEXTURES	:=  textures
 INCLUDES	:=
 
-SDPATH = G:\apps\game
+SDPATH = F:\apps\game
 
 #---------------------------------------------------------------------------------
 # options for code generation

@@ -8,6 +8,22 @@ typedef enum {
     COLOR_TYPE_BLACK
 } ColorType;
 
+typedef enum {
+    HITBOX_TYPE_NONE = 0,
+    HITBOX_TYPE_BOX
+} HitboxType;
+
+typedef struct {
+    HitboxType type;
+    f32 x;
+    f32 y;
+    union {
+        f32 width;
+        f32 radius;
+    };
+    f32 height;
+} Hitbox;
+
 typedef struct {
     char* texture;
     float anchor_x;
@@ -34,6 +50,7 @@ typedef struct {
     bool swap_base_detail;
     int numChildren;
     ObjectDataChild* children;
+    Hitbox hitbox;
 } ObjectData;
 
 ObjectData* getObjectData(const char* filename);

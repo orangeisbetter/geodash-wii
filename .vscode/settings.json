@@ -32,6 +32,15 @@
         "compare": "c",
         "limits": "c",
         "new": "c",
-        "screenmanager.h": "c"
+        "screenmanager.h": "c",
+        "sort.h": "c",
+        "gamelevel.h": "c",
+        "array": "c",
+        "memory": "c",
+        "format": "c",
+        "functional": "c",
+        "tuple": "c",
+        "utility": "c",
+        "variant": "c"
     }
 }

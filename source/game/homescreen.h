@@ -1,4 +1,7 @@
 #pragma once
 
-void loadHomeScreen();
-void runHomeScreen();
+#include <gccore.h>
+
+#include "screenManager.h"
+
+extern const GameState GAMESTATE_HOME;

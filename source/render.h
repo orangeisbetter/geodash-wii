@@ -56,8 +56,11 @@ TexSize RDR_getTexSize(int sheetId);
 void RDR_drawBackground(GXTexObj* background, f32 x, f32 y, f32 scale, u32 color);
 void RDR_drawGround(GXTexObj* ground, f32 x, f32 y, f32 viewScale, u32 color);
 void RDR_drawLine(Mtx view, f32 camY, f32 viewScale);
+void RDR_drawMenuBackground(f32 x, f32 y, f32 scale, u32 topColor, u32 bottomColor);
 
 void RDR_drawSpriteFromMap(texture_info* tex, SpriteInfo sprite, int colorChannel, Mtx view);
+void RDR_drawSpriteFromMap2(texture_info* tex, SpriteInfo sprite, u32 color, bool blending, Mtx view);
+void RDR_drawRect(GXTexObj* tex, f32 x, f32 y, f32 w, f32 h, u32 color);
 
 int RDR_RenderCacheInit(RenderCache* renderCache, int initialCapacity);
 RenderObject* RDR_RenderCacheAdd(RenderCache* renderCache);

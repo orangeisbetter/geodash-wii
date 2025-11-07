@@ -6,12 +6,42 @@
 #include <stdlib.h>
 #include <mp3player.h>
 #include <wiiuse/wpad.h>
+#include <math.h>
 
+#include "../util/sort.h"
 #include "../constants.h"
 #include "../parse/level.h"
 #include "../render.h"
 #include "../color.h"
 #include "../gfx.h"
+#include "menu.h"
+
+static void levelEnter();
+static void levelExit();
+static void levelRun(f32 deltaTime);
+static void levelRender();
+
+const GameState GAMESTATE_LEVEL = {
+    .enter = levelEnter,
+    .exit = levelExit,
+    .run = levelRun,
+    .render = levelRender
+};
+
+typedef enum {
+    NONE,
+    HAZARD,
+    SOLID,
+    PAD,
+    PORTAL,
+    ORB,
+    TRIGGER
+} CollisionType;
+
+typedef enum {
+    CUBE,
+    SHIP
+} GameMode;
 
 ObjectData* objectDefaults = NULL;
 
@@ -22,13 +52,31 @@ static s32 my_reader(void* cb_data, void* dst, s32 len) {
 
 static int currentLevelId;
 
+static f32 lastX;
 static f32 camX;
 static f32 camY;
 static f32 velX;
 static f32 velY;
+static bool grounded;
+static bool bufferedInput;
+static f32 bufferedInputTime;
+static const f32 defaultSpeed = 10.386f;                           // Units: blocks per second
+static const f32 gravity = -0.876f * defaultSpeed * defaultSpeed;  // Units: blocks per second squared
+static f32 gravityModifier = 1.0f;
 
-static f32 gravity;
-const static f32 defaultSpeed = 10.386f;
+static const f32 velCubeJump = 1.94f;
+static const f32 velYellowPad = 2.77f;
+// static const f32 velPinkPad = 1.79f;
+// static const f32 velRedPad = 3.65f;
+static const f32 velBluePad = -1.37f;
+static const f32 velYellowOrb = 1.91f;
+// static const f32 velPinkOrb = 1.37f;
+// static const f32 velRedOrb = 2.68f;
+static const f32 velBlueOrb = -1.37f;
+// static const f32 velGreenOrb = -1.91f;
+// static const f32 velBlackOrb = -2.6f;
+
+static const f32 cameraVerticalBounds_2 = 75.0f;
 
 static SpriteInfo player = {
     0,
@@ -38,6 +86,8 @@ static SpriteInfo player = {
     false,
 };
 
+static GameMode gameMode;
+
 static LevelObject* objects;
 static int objectsSize;
 
@@ -45,11 +95,9 @@ static RenderCache renderCache = { 0 };
 
 static const f32 viewScale = 1.5f;
 
-static u64 lastFrameCPU = 0;
 static u64 lastFrameRender = 0;
-static u64 lastFrameTotal = 0;
 
-static const char* levelNames[] = {
+const char* levelNames[] = {
     "Stereo Madness",
     "Back On Track",
     "Polargeist",
@@ -59,7 +107,19 @@ static const char* levelNames[] = {
     "Jumper",
     "Time Machine",
     "Cycles",
-    "xStep"
+    "xStep",
+    "Clutterfunk",
+    "Theory of Everything",
+    "Electroman Adventures",
+    "Clubstep",
+    "Electrodynamix",
+    "Hexagon Force",
+    "Blast Processing",
+    "*****",
+    "Geometrical Dominator",
+    "*****",
+    "Fingerdash",
+    "Dash"
 };
 
 static const char* levelMusic[] = {
@@ -72,12 +132,20 @@ static const char* levelMusic[] = {
     "Jumper.mp3",
     "TimeMachine.mp3",
     "Cycles.mp3",
-    "xStep.mp3"
+    "xStep.mp3",
+    "Clutterfunk.mp3",
+    "TheoryOfEverything.mp3",
+    "Electroman.mp3",
+    "Clubstep.mp3",
+    "Electrodynamix.mp3",
+    "HexagonForce.mp3",
+    "BlastProcessing.mp3",
+    "*****",
+    "GeometricalDominator.mp3",
+    "*****",
+    "Fingerdash.mp3",
+    "Dash.mp3"
 };
-
-// static int renderCacheCapacity;
-// static int renderCacheSize;
-// static RenderObject* renderCache;
 
 static int compare(const void* a, const void* b) {
     int first = ((RenderObject*)a)->z_layer - ((RenderObject*)b)->z_layer;
@@ -87,11 +155,97 @@ static int compare(const void* a, const void* b) {
     return ((RenderObject*)a)->z_order - ((RenderObject*)b)->z_order;
 }
 
-int loadLevel(int levelId) {
-    // -----------------------------------------------------------------
-    // Load level
-    // -----------------------------------------------------------------
+bool intersects(const LevelObject* o, const Hitbox* hitbox, const SpriteInfo* player) {
+    if (hitbox->type == HITBOX_TYPE_NONE) {
+        return false;
+    }
+    // SYS_Report("player x: %f, y: %f\n hitbox x: %f, y: %f, width: %f, height %f\n", b->x, b->y, a->x, a->y, a->width, a->height);
+    return !(hitbox->x + o->x + hitbox->width / 2 <= player->x - 15.0 ||
+             hitbox->x + o->x - hitbox->width / 2 >= player->x + 15.0 ||
+             hitbox->y + o->y + hitbox->height / 2 <= player->y - 15.0 ||
+             hitbox->y + o->y - hitbox->height / 2 >= player->y + 15.0);
+}
 
+bool intersectsY(const LevelObject* o, const Hitbox* hitbox, const SpriteInfo* player) {
+    if (hitbox->type == HITBOX_TYPE_NONE) {
+        return false;
+    }
+    // SYS_Report("player x: %f, y: %f\n hitbox x: %f, y: %f, width: %f, height %f\n", b->x, b->y, a->x, a->y, a->width, a->height);
+    return !(
+        hitbox->y + o->y + hitbox->height / 2 <= player->y - 15.0 ||
+        hitbox->y + o->y - hitbox->height / 2 >= player->y + 15.0);
+}
+
+int getCollisionType(const LevelObject* object) {
+    switch (object->id) {
+        case 8:
+        case 9:
+        case 39:
+        case 61:
+        case 88:
+        case 89:
+        case 98:
+        case 103:
+        case 144:
+        case 145:
+        case 205:
+        case 392:
+        case 459:
+            return HAZARD;
+        case 1:
+        case 2:
+        case 3:
+        case 4:
+        case 6:
+        case 7:
+        case 40:
+        case 62:
+        case 63:
+        case 64:
+        case 65:
+        case 66:
+        case 68:
+        case 69:
+        case 70:
+        case 71:
+        case 72:
+        case 74:
+        case 75:
+        case 76:
+        case 77:
+        case 78:
+        case 81:
+        case 82:
+        case 83:
+        case 90:
+        case 91:
+        case 92:
+        case 93:
+        case 94:
+        case 95:
+        case 96:
+            return SOLID;
+        case 35:  // yellow
+        case 67:  // blue
+            return PAD;
+        case 10:  // blue
+        case 11:  // yellow
+        case 12:  // cube
+        case 13:  // ship
+        case 45:
+        case 46:
+        case 47:
+        case 99:
+            return PORTAL;
+        case 36:  // yellow
+        case 84:  // blue
+            return ORB;
+        default:
+            return NONE;  // no collision
+    }
+}
+
+int loadLevel(int levelId) {
     currentLevelId = levelId;
 
     u64 start = gettime();
@@ -105,101 +259,249 @@ int loadLevel(int levelId) {
     }
 
     objects = GDL_ParseLevelString(levelString, &objectsSize, objectDefaults);
+    if (!objects) {
+        return 0;
+    }
 
     free(levelString);
 
     SYS_Report("Level loaded: %d objects. (%f ms)\n", objectsSize, ticks_to_microsecs(gettime() - start) / 1000.0f);
-    camX = 0.0f;
-    camY = 120.0f;
-
-    velX = defaultSpeed * 30.0f;
-    velY = 0.0f;
-
-    gravity = -(10.0f / 12.0f) * defaultSpeed * defaultSpeed * 30.0f;
-
-    colorInit();
-
-    if (!RDR_RenderCacheInit(&renderCache, 32)) {
-        SYS_Report("Unable to allocate memory for object cache\n");
-        return 0;
-    }
-
-    SYS_Report("Render cache created with size %d and capacity %d, p = %p\n", renderCache.size, renderCache.capacity, renderCache.objects);
-
-    {
-        char buf[64];
-        snprintf(buf, 64, ASSETS_PATH "music/%s", levelMusic[levelId]);
-        FILE* file = fopen(buf, "rb");
-        MP3Player_PlayFile(file, my_reader, NULL);
-    }
-
-    // u64 jumpTime = 30000000;
-    // u64 jumpStartTime = 0;
 
     return 1;
 }
 
-void runLevel(Mtx view, Mtx modelView, u32 pressed) {
-    // while (HWButton == -1) {
-    //  if (gettime() - jumpStartTime < jumpTime) {
-    //      // SYS_Report("Time left: %u\n", gettime() - jumpStartTime);
-    //      u64 dy = (gettime() - jumpStartTime) / 600000;
-    //      u64 newY = dy;
-    //      if ((gettime() - jumpStartTime) < jumpTime / 2) {
-    //      } else {
-    //          newY = (jumpTime - (gettime() - jumpStartTime)) / 600000;
-    //      }
-    //      player.y = newY + 15;
-    //      // player.rotation = jumpTime / (gettime() - jumpStartTime) * 90;
-    //  }
+static void levelEnter() {
+    camX = 0.0f;
+    camY = cameraVerticalBounds_2;
 
-    // if (pressed & WPAD_BUTTON_A) {
-    //     SYS_Report("Player jumped!!! at time: %u\n", gettime());
-    //     jumpStartTime = gettime();
-    // }
+    velX = defaultSpeed * 30.0f;
+    velY = 0.0f;
 
-    // --------------------------------------------------------------------
-    // Game logic
-    // --------------------------------------------------------------------
+    player.x = 0;
+    player.y = 15;
+    player.rotation = 0;
 
-    const static f32 dt = 1.0f / 60.0f;
+    gravityModifier = 1.0f;
 
-    u64 allStart = gettime();
+    grounded = true;
+    bufferedInput = false;
+    bufferedInputTime = 0;
 
-    f32 lastX = camX;
+    gameMode = CUBE;
 
-    velY += gravity * dt;
+    colorInit();
 
-    if (pressed & WPAD_BUTTON_A) {
-        velY = (23.0f / 12.0f) * defaultSpeed * 30.0f;
+    if (!RDR_RenderCacheInit(&renderCache, 256)) {
+        SYS_Report("Unable to allocate memory for object cache\n");
+        exit(EXIT_FAILURE);
     }
-    player.y += velY * dt;
-    player.rotation += (5.0f / 23.0f) * defaultSpeed * 180.0f * dt;
+
+    SYS_Report("Render cache created with size %d and capacity %d, p = %p\n", renderCache.size, renderCache.capacity, renderCache.objects);
+
+    MP3Player_Stop();
+
+    {
+        char buf[64];
+        snprintf(buf, 64, ASSETS_PATH "music/%s", levelMusic[currentLevelId]);
+        FILE* file = fopen(buf, "rb");
+        MP3Player_PlayFile(file, my_reader, NULL);
+    }
+}
+
+static void levelExit() {
+    MP3Player_Stop();
+
+    free(objects);
+    objectsSize = 0;
+
+    RDR_RenderCacheClear(&renderCache);
+}
+
+static void levelRun(f32 deltaTime) {
+    lastX = player.x;
+
+    u32 pressed = WPAD_ButtonsDown(0);
+    u32 held = WPAD_ButtonsHeld(0);
+
+    switch (gameMode) {
+        case CUBE:
+            velY += gravity * gravityModifier * deltaTime;
+
+            if (velY * gravityModifier < -2.6f * defaultSpeed) {
+                velY = -2.6f * gravityModifier * defaultSpeed;
+            }
+
+            if (held & WPAD_BUTTON_A) {
+                if (grounded) {
+                    velY = velCubeJump * gravityModifier * defaultSpeed;
+                    grounded = false;
+                }
+            }
+
+            if (bufferedInput && bufferedInputTime > 2 / 60.0f) {
+                bufferedInput = false;
+                bufferedInputTime = 0;
+            } else {
+                bufferedInputTime += deltaTime;
+            }
+
+            if (pressed & WPAD_BUTTON_A) {
+                bufferedInput = true;
+                bufferedInputTime = 0;
+            }
+
+            break;
+        case SHIP:
+            if (held & WPAD_BUTTON_A) {
+                velY = (gravityModifier * deltaTime * defaultSpeed);
+            }
+
+            break;
+    }
+
+    if (pressed & WPAD_BUTTON_B) {
+        changeState(&GAMESTATE_MENU, .5);
+    }
+
+    player.x += velX * deltaTime;
+
+    // Check Hazard collisions
+    for (int i = 0; i < objectsSize; i++) {
+        LevelObject* object = &objects[i];
+
+        Hitbox* objectHitbox = &objectDefaults[object->id].hitbox;
+        if (intersects(object, objectHitbox, &player)) {
+            if (getCollisionType(object) == HAZARD) {
+                SYS_Report("ded\n");
+                // TODO kill player
+            }
+        }
+    }
+
+    // Check X collisions
+    for (int i = 0; i < objectsSize; i++) {
+        LevelObject* object = &objects[i];
+
+        Hitbox* objectHitbox = &objectDefaults[object->id].hitbox;
+        if (intersects(object, objectHitbox, &player)) {
+            // SYS_Report("there was a collision (x)!\n");  // crash the game
+            float overlapX = fmin(object->x + objectHitbox->x + objectHitbox->width / 2, player.x + 15.0) - fmax(player.x - 15, object->x + objectHitbox->x - objectHitbox->width / 2);
+
+            if (player.x < object->x + objectHitbox->x) {
+                SYS_Report("ded\n");
+                // player.x -= overlapX;  // move left
+            }
+        }
+    }
+
+    player.y += velY * deltaTime * 30.0f;
+    player.rotation += (5.0f / 23.0f) * defaultSpeed * 180.0f * deltaTime * gravityModifier;
+
+    grounded = false;
+
+    // Check Y collisions
+    for (int i = 0; i < objectsSize; i++) {
+        LevelObject* object = &objects[i];
+
+        Hitbox* objectHitbox = &objectDefaults[object->id].hitbox;
+        if (intersects(object, objectHitbox, &player)) {
+            // SYS_Report("there was a collision (y)!\n");  // crash the game
+
+            float overlapY = fmin(object->y + objectHitbox->y + objectHitbox->height / 2, player.y + 15.0) - fmax(player.y - 15, object->y + objectHitbox->y - objectHitbox->height / 2);
+            if (getCollisionType(object) == SOLID) {
+                if (player.y > object->y + objectHitbox->y && gravityModifier > 0.0f) {
+                    player.y += overlapY;  // move up
+                    velY = 0;
+                    player.rotation = roundf(player.rotation / 90.0f) * 90.0f;
+                    grounded = true;
+                } else if (player.y < object->y + objectHitbox->y && gravityModifier < 0.0f) {
+                    player.y -= overlapY;  // move down
+                    velY = 0;
+                    player.rotation = roundf(player.rotation / 90.0f) * -90.0f;
+                    grounded = true;
+                } else {
+                    SYS_Report("ded\n");
+                }
+            }
+        }
+    }
 
     if (player.y < 15) {
         velY = 0;
         player.y = 15;
         player.rotation = roundf(player.rotation / 90.0f) * 90.0f;
+        grounded = true;
     }
 
-    player.x += velX * dt;
+    // Check Pad collisions
+    for (int i = 0; i < objectsSize; i++) {
+        LevelObject* object = &objects[i];
 
-    camX += velX * dt;
-    // camX += 1.0f * 30.0f / 60.0f;
+        Hitbox* objectHitbox = &objectDefaults[object->id].hitbox;
 
-    // Calculate view and fade bounds based on camera position
+        if (intersects(object, objectHitbox, &player)) {
+            switch (getCollisionType(object)) {
+                case PAD:
+                    switch (object->id) {
+                        case 35:
+                            velY = velYellowPad * gravityModifier * defaultSpeed;
+                            break;
+                        case 67:
+                            velY = velBluePad * gravityModifier * defaultSpeed;
+                            gravityModifier *= -1.0f;
+                            break;
+                    }
+                    break;
+                case PORTAL:
+                    switch (object->id) {
+                        case 10:
+                            gravityModifier = 1.0f;
+                            break;
+                        case 11:
+                            gravityModifier = -1.0f;
+                            break;
+                        case 12:
+                            gameMode = CUBE;
+                            break;
+                        case 13:
+                            gameMode = SHIP;
+                            break;
+                    }
+                    break;
+                case ORB:
+                    if (WPAD_ButtonsDown(0) & WPAD_BUTTON_A || bufferedInput) {
+                        if (bufferedInput) {
+                            bufferedInput = false;
+                        }
+                        switch (object->id) {
+                            case 36:
+                                velY = velYellowOrb * gravityModifier * defaultSpeed;
+                                break;
+                            case 84:
+                                velY = velBlueOrb * gravityModifier * defaultSpeed;
+                                gravityModifier *= -1.0f;
+                                break;
+                        }
+                    }
+                    break;
+            }
+        }
+    }
+
+    camX = player.x + 2.5f * 30.0f;
+
+    if (player.y < camY - cameraVerticalBounds_2) {
+        camY = player.y + cameraVerticalBounds_2;
+    } else if (player.y > camY + cameraVerticalBounds_2) {
+        camY = player.y - cameraVerticalBounds_2;
+    }
+
     f32 viewBoundsL = camX - (view_width / 2.0f) / viewScale;
     f32 viewBoundsR = camX + (view_width / 2.0f) / viewScale;
 
-    f32 fadeBoundsL = viewBoundsL + 90.0f;
-    f32 fadeBoundsR = viewBoundsR - 90.0f;
-
-    // Build render cache
-    RDR_RenderCacheClear(&renderCache);
-
     for (int i = 0; i < objectsSize; i++) {
         LevelObject* object = &objects[i];
-        // first check to see if it's on screen
+
         if (object->x < viewBoundsL || object->x > viewBoundsR) {
             continue;
         }
@@ -218,7 +520,7 @@ void runLevel(Mtx view, Mtx modelView, u32 pressed) {
             object->id == 743 ||
             object->id == 899 ||
             object->is_trigger) {
-            if (object->x > lastX && object->x <= camX) {
+            if (object->x > lastX && object->x <= player.x) {
                 u32 color = ((u32)object->red << 24) + ((u32)object->green << 16) + ((u32)object->blue << 8) + ((u32)(object->opacity * 255));
                 Color colorObj = { color, object->blending };
                 switch (object->id) {
@@ -255,6 +557,26 @@ void runLevel(Mtx view, Mtx modelView, u32 pressed) {
                 }
             }
         }
+    }
+}
+
+static void levelRender() {
+    f32 viewBoundsL = camX - (view_width / 2.0f) / viewScale;
+    f32 viewBoundsR = camX + (view_width / 2.0f) / viewScale;
+
+    f32 fadeBoundsL = viewBoundsL + 90.0f;
+    f32 fadeBoundsR = viewBoundsR - 90.0f;
+
+    // Build render cache
+    RDR_RenderCacheClear(&renderCache);
+
+    for (int i = 0; i < objectsSize; i++) {
+        LevelObject* object = &objects[i];
+        // first check to see if it's on screen
+        if (object->x < viewBoundsL || object->x > viewBoundsR) {
+            continue;
+        }
+
         // then check to see it it's an animation trigger
 
         if (object->id == 22 ||
@@ -280,7 +602,7 @@ void runLevel(Mtx view, Mtx modelView, u32 pressed) {
 
         texture_info* tex = ht_search(objectData->texture);
         if (tex == NULL) {
-            SYS_Report("Can't find texture %d\n", object->id);
+            // SYS_Report("Can't find texture %d\n", object->id);
             continue;
         }
 
@@ -355,7 +677,7 @@ void runLevel(Mtx view, Mtx modelView, u32 pressed) {
             ObjectDataChild* child = &children[i];
             texture_info* tex = ht_search(child->texture);
             if (tex == NULL) {
-                SYS_Report("Can't find texture %d\n", object->id);
+                // SYS_Report("Can't find texture %d\n", object->id);
                 continue;
             }
 
@@ -388,9 +710,8 @@ void runLevel(Mtx view, Mtx modelView, u32 pressed) {
     }
 
     // sort object cache (for layering)
-    qsort(renderCache.objects, renderCache.size, sizeof(RenderObject), compare);
-
-    u64 cpuTime = gettime() - allStart;
+    merge_sort(renderCache.objects, renderCache.size, sizeof(RenderObject), compare);
+    // qsort(renderCache.objects, renderCache.size, sizeof(RenderObject), compare);
 
     // --------------------------------------------------------------------
     // Render graphics
@@ -398,7 +719,7 @@ void runLevel(Mtx view, Mtx modelView, u32 pressed) {
 
     u64 renderStart = gettime();
     GFX_ResetDrawMode();
-
+    Mtx view;
     guMtxIdentity(view);
 
     // Background and ground are special, they don't use the camera view matrix. IT'S ALL AN ILLUSION
@@ -472,17 +793,15 @@ void runLevel(Mtx view, Mtx modelView, u32 pressed) {
     Mtx model;
     guMtxTrans(model, -(view_width / 2.0f) + 10.0f, view_height / 2.0f - 10.0f, 0.0f);
     char buf[100];
-    u64 us = ticks_to_microsecs(lastFrameCPU);
-    snprintf(buf, 100, "CPU: %2lld.%03lld ms", us / 1000, us % 1000);
-    f32 offset = Font_RenderText(&font, &fontTexture, buf, 16.0f, ALIGN_LEFT, 600.0f, model);
 
-    us = ticks_to_microsecs(lastFrameRender);
-    snprintf(buf, 100, "RDR: %2lld.%03lld ms", us / 1000, us % 1000);
+    snprintf(buf, 100, "Current level: %s (%d)", levelNames[currentLevelId], currentLevelId + 1);
+    f32 offset = Font_RenderText(&font, &fontTexture, buf, 20.0f, ALIGN_LEFT, 600.0f, model);
+
+    snprintf(buf, 100, "pos: %.3f, %.3f", player.x, player.y);
     guMtxTransApply(model, model, 0.0f, offset, 0.0f);
     offset = Font_RenderText(&font, &fontTexture, buf, 16.0f, ALIGN_LEFT, 600.0f, model);
 
-    us = ticks_to_microsecs(lastFrameTotal);
-    snprintf(buf, 100, "ALL: %2lld.%03lld ms", us / 1000, us % 1000);
+    snprintf(buf, 100, "vel: %.3f, %.3f", velX, velY);
     guMtxTransApply(model, model, 0.0f, offset, 0.0f);
     offset = Font_RenderText(&font, &fontTexture, buf, 16.0f, ALIGN_LEFT, 600.0f, model);
 
@@ -490,24 +809,44 @@ void runLevel(Mtx view, Mtx modelView, u32 pressed) {
     guMtxTransApply(model, model, 0.0f, offset, 0.0f);
     offset = Font_RenderText(&font, &fontTexture, buf, 16.0f, ALIGN_LEFT, 600.0f, model);
 
-    snprintf(buf, 100, "Position: (%.3f, %.3f), velocity: (%.3f, %.3f)", player.x, player.y, velX, velY);
+    u64 us = ticks_to_microsecs(lastFrameRender);
+    snprintf(buf, 100, "RDR: %2lld.%03lld ms", us / 1000, us % 1000);
     guMtxTransApply(model, model, 0.0f, offset, 0.0f);
     offset = Font_RenderText(&font, &fontTexture, buf, 16.0f, ALIGN_LEFT, 600.0f, model);
 
-    snprintf(buf, 100, "Current level: %s (%d)", levelNames[currentLevelId], currentLevelId + 1);
-    guMtxTransApply(model, model, 0.0f, offset, 0.0f);
-    offset = Font_RenderText(&font, &fontTexture, buf, 20.0f, ALIGN_LEFT, 600.0f, model);
-
     u64 renderTime = gettime() - renderStart;
-    u64 totalTime = gettime() - allStart;
 
-    lastFrameCPU = cpuTime;
     lastFrameRender = renderTime;
-    lastFrameTotal = totalTime;
 
     // if (HWButton != -1) {
     //     free(objects);
     //     SYS_ResetSystem(SYS_POWEROFF, 0, 0);
     //     // SYS_ResetSystem(SYS_RETURNTOMENU, 0, 0);
     // }
+}
+
+void runLevel() {
+    // while (HWButton == -1) {
+    //  if (gettime() - jumpStartTime < jumpTime) {
+    //      // SYS_Report("Time left: %u\n", gettime() - jumpStartTime);
+    //      u64 dy = (gettime() - jumpStartTime) / 600000;
+    //      u64 newY = dy;
+    //      if ((gettime() - jumpStartTime) < jumpTime / 2) {
+    //      } else {
+    //          newY = (jumpTime - (gettime() - jumpStartTime)) / 600000;
+    //      }
+    //      player.y = newY + 15;
+    //      // player.rotation = jumpTime / (gettime() - jumpStartTime) * 90;
+    //  }
+
+    // if (pressed & WPAD_BUTTON_A) {
+    //     SYS_Report("Player jumped!!! at time: %u\n", gettime());
+    //     jumpStartTime = gettime();
+    // }
+
+    // --------------------------------------------------------------------
+    // Game logic
+    // --------------------------------------------------------------------
+
+    // Calculate view and fade bounds based on camera position
 }

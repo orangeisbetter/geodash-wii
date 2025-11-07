@@ -134,6 +134,48 @@ void RDR_drawGround(GXTexObj* ground, f32 x, f32 y, f32 viewScale, u32 color) {
     GX_End();
 }
 
+void RDR_drawMenuBackground(f32 x, f32 y, f32 scale, u32 topColor, u32 bottomColor) {
+    f32 w = view_width / 2.0f;
+    f32 h = view_height / 2.0f;
+
+    GX_ClearVtxDesc();
+    GX_SetVtxDesc(GX_VA_POS, GX_DIRECT);
+    GX_SetVtxDesc(GX_VA_CLR0, GX_DIRECT);
+
+    GX_SetVtxAttrFmt(GX_VTXFMT0, GX_VA_POS, GX_POS_XYZ, GX_F32, 0);
+    GX_SetVtxAttrFmt(GX_VTXFMT0, GX_VA_CLR0, GX_CLR_RGBA, GX_RGBA8, 0);
+
+    GX_SetTevOp(GX_TEVSTAGE0, GX_PASSCLR);
+
+    GX_SetNumChans(1);
+    GX_SetNumTexGens(0);
+
+    GFX_SetBlendMode(BLEND_NONE);
+
+    Mtx model;
+    guMtxIdentity(model);
+    guMtxTransApply(model, model, 0.0f, 0.0f, -100.0f);
+    GX_LoadPosMtxImm(model, GX_PNMTX0);
+
+    GX_Begin(GX_QUADS, GX_VTXFMT0, 4);
+
+    GX_Position3f32(-w, h, 0.0f);
+    GX_Color1u32(topColor);
+
+    GX_Position3f32(w, h, 0.0f);
+    GX_Color1u32(topColor);
+
+    GX_Position3f32(w, -h, 0.0f);
+    GX_Color1u32(bottomColor);
+
+    GX_Position3f32(-w, -h, 0.0f);
+    GX_Color1u32(bottomColor);
+
+    GX_End();
+
+    GFX_ResetDrawMode();
+}
+
 void RDR_drawLine(Mtx view, f32 camY, f32 viewScale) {
     GX_ClearVtxDesc();
     GX_SetVtxDesc(GX_VA_POS, GX_DIRECT);
@@ -203,13 +245,17 @@ void RDR_drawLine(Mtx view, f32 camY, f32 viewScale) {
 }
 
 void RDR_drawSpriteFromMap(texture_info* tex, SpriteInfo sprite, int colorChannel, Mtx view) {
-    if (getColorChannel(colorChannel).blending) {
+    Color color = getColorChannel(colorChannel);
+    RDR_drawSpriteFromMap2(tex, sprite, color.color, color.blending, view);
+}
+
+void RDR_drawSpriteFromMap2(texture_info* tex, SpriteInfo sprite, u32 color, bool blending, Mtx view) {
+    if (blending) {
         GX_SetBlendMode(GX_BM_BLEND, GX_BL_SRCALPHA, GX_BL_ONE, GX_LO_NOOP);
     } else {
         GX_SetBlendMode(GX_BM_BLEND, GX_BL_SRCALPHA, GX_BL_INVSRCALPHA, GX_LO_NOOP);
     }
 
-    u32 color = getColorChannel(colorChannel).color;
     f32 dx = sprite.x;
     f32 dy = sprite.y;
     f32 dw = tex->spriteSize.x;
@@ -262,6 +308,92 @@ void RDR_drawSpriteFromMap(texture_info* tex, SpriteInfo sprite, int colorChanne
         GFX_Plot(+halfW, -halfH, 0.0f, u1, v1, color);
         GFX_Plot(-halfW, -halfH, 0.0f, u0, v1, color);
     }
+
+    GX_End();
+}
+
+void RDR_drawRect(GXTexObj* tex, f32 x, f32 y, f32 w, f32 h, u32 color) {
+    f32 width = GX_GetTexObjWidth(tex);
+    f32 height = GX_GetTexObjHeight(tex);
+
+    f32 texWidthFactor = 0.5f;
+    f32 texHeightFactor = 0.5f;
+
+    if (h < height) {
+        texHeightFactor = h / height / 2.0;
+        height = h;
+    }
+    if (w < width) {
+        texWidthFactor = w / width / 2.0;
+        width = w;
+    }
+
+    // SYS_Report("width factor: %f, height factor: %f\n", texWidthFactor, texHeightFactor);
+
+    Mtx model;
+    guMtxIdentity(model);
+    guMtxTransApply(model, model, 0.0f, 0.0f, -1.0f);
+    GX_LoadPosMtxImm(model, GX_PNMTX0);
+
+    GFX_LoadTexture(tex, GX_TEXMAP0);
+    GX_SetTevOp(GX_TEVSTAGE0, GX_MODULATE);
+
+    GFX_SetBlendMode(BLEND_ALPHA);
+
+    f32 w2 = w / 2.0f;
+    f32 h2 = h / 2.0f;
+
+    // topleft
+    GX_Begin(GX_QUADS, GX_VTXFMT0, 16);
+
+    GFX_Plot(-w2 + x, h2 + y, 0.0f, 0.0f, 0.0f, color);
+    GFX_Plot(-w2 + width / 2 + x, h2 + y, 0.0f, texWidthFactor, 0.0f, color);
+    GFX_Plot(-w2 + width / 2 + x, h2 - height / 2 + y, 0.0f, texWidthFactor, texHeightFactor, color);
+    GFX_Plot(-w2 + x, h2 - height / 2 + y, 0.0f, 0.0f, texHeightFactor, color);
+
+    GFX_Plot(w2 - width / 2 + x, h2 + y, 0.0f, 1 - texWidthFactor, 0.0f, color);
+    GFX_Plot(w2 + x, h2 + y, 0.0f, 1.0f, 0.0f, color);
+    GFX_Plot(w2 + x, h2 - height / 2 + y, 0.0f, 1.0f, texHeightFactor, color);
+    GFX_Plot(w2 - width / 2 + x, h2 - height / 2 + y, 0.0f, 1 - texWidthFactor, texHeightFactor, color);
+
+    GFX_Plot(w2 - width / 2 + x, -h2 + height / 2 + y, 0.0f, 1 - texWidthFactor, 1 - texHeightFactor, color);
+    GFX_Plot(w2 + x, -h2 + height / 2 + y, 0.0f, 1.0f, 1 - texHeightFactor, color);
+    GFX_Plot(w2 + x, -h2 + y, 0.0f, 1.0f, 1.0f, color);
+    GFX_Plot(w2 - width / 2 + x, -h2 + y, 0.0f, 1 - texWidthFactor, 1.0f, color);
+
+    GFX_Plot(-w2 + x, -h2 + height / 2 + y, 0.0f, 0.0f, 1 - texHeightFactor, color);
+    GFX_Plot(-w2 + width / 2 + x, -h2 + height / 2 + y, 0.0f, texWidthFactor, 1 - texHeightFactor, color);
+    GFX_Plot(-w2 + width / 2 + x, -h2 + y, 0.0f, texWidthFactor, 1.0f, color);
+    GFX_Plot(-w2 + x, -h2 + y, 0.0f, 0.0f, 1.0f, color);
+
+    GX_End();
+
+    GX_Begin(GX_QUADS, GX_VTXFMT0, 20);
+    // left
+    GFX_Plot(-w2 + x, h2 - height / 2 + y, 0.0f, 0.0f, 0.25f, color);
+    GFX_Plot(-w2 + width / 2 + x, h2 - height / 2 + y, 0.0f, texWidthFactor, 0.25f, color);
+    GFX_Plot(-w2 + width / 2 + x, -h2 + height / 2 + y, 0.0f, texWidthFactor, 0.75f, color);
+    GFX_Plot(-w2 + x, -h2 + height / 2 + y, 0.0f, 0.0f, 0.75f, color);
+    // top
+    GFX_Plot(-w2 + width / 2 + x, h2 + y, 0.0f, 0.25f, 0.0f, color);
+    GFX_Plot(w2 - width / 2 + x, h2 + y, 0.0f, 0.75f, 0.0f, color);
+    GFX_Plot(w2 - width / 2 + x, h2 - height / 2 + y, 0.0f, 0.75f, texHeightFactor, color);
+    GFX_Plot(-w2 + width / 2 + x, h2 - height / 2 + y, 0.0f, 0.25f, texHeightFactor, color);
+    // right
+    GFX_Plot(w2 - width / 2 + x, h2 - height / 2 + y, 0.0f, 1 - texWidthFactor, 0.25f, color);
+    GFX_Plot(w2 + x, h2 - height / 2 + y, 0.0f, 1.0f, 0.25f, color);
+    GFX_Plot(w2 + x, -h2 + height / 2 + y, 0.0f, 1.0f, 0.75f, color);
+    GFX_Plot(w2 - width / 2 + x, -h2 + height / 2 + y, 0.0f, 1 - texWidthFactor, 0.75f, color);
+    // bottom
+    GFX_Plot(-w2 + width / 2 + x, -h2 + height / 2 + y, 0.0f, 0.25f, 1 - texHeightFactor, color);
+    GFX_Plot(w2 - width / 2 + x, -h2 + height / 2 + y, 0.0f, 0.75f, 1 - texHeightFactor, color);
+    GFX_Plot(w2 - width / 2 + x, -h2 + y, 0.0f, 0.75f, 1.0f, color);
+    GFX_Plot(-w2 + width / 2 + x, -h2 + y, 0.0f, 0.25f, 1.0f, color);
+    // center
+    GFX_Plot(-w2 + width / 2 + x, h2 - height / 2 + y, 0.0f, 0.25f, 0.25f, color);
+    GFX_Plot(w2 - width / 2 + x, h2 - height / 2 + y, 0.0f, 0.75f, 0.25f, color);
+    GFX_Plot(w2 - width / 2 + x, -h2 + height / 2 + y, 0.0f, 0.75f, 0.75f, color);
+    GFX_Plot(-w2 + width / 2 + x, -h2 + height / 2 + y, 0.0f, 0.25f, 0.75f, color);
 
     GX_End();
 }

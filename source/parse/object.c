@@ -53,6 +53,17 @@ inline void JSON_ColorType(cJSON* obj, ColorType* target) {
         }                                                            \
     } while (0)
 
+int streq(const char* a, const char* b) {
+    while (*a == *b) {
+        if (!*a) {
+            return 1;
+        }
+        a++;
+        b++;
+    }
+    return 0;
+}
+
 ObjectData* getObjectData(const char* filename) {
     // read json file into character buffer
     FILE* objectsFile = fopen(filename, "rb");
@@ -93,6 +104,29 @@ ObjectData* getObjectData(const char* filename) {
         JSON_INT(item, "default_detail_color_channel", object->default_detail_color_channel);
         JSON_BOOL(item, "swap_base_detail", object->swap_base_detail);
         JSON_ColorType(item, &object->color_type);
+
+        cJSON* hitbox = cJSON_GetObjectItem(item, "hitbox");
+        if (!cJSON_IsNull(hitbox)) {
+            cJSON* type = cJSON_GetObjectItem(hitbox, "type");
+            const char* sv;
+            if (cJSON_IsString(type)) {
+                const char* sv = cJSON_GetStringValue(type);
+                if (streq(sv, "Box")) {
+                    object->hitbox.type = HITBOX_TYPE_BOX;
+                } else {
+                    object->hitbox.type = HITBOX_TYPE_NONE;
+                }
+            } else {
+                object->hitbox.type = HITBOX_TYPE_NONE;
+            }
+
+            JSON_FLOAT(hitbox, "x", object->hitbox.x);
+            JSON_FLOAT(hitbox, "y", object->hitbox.y);
+            JSON_FLOAT(hitbox, "width", object->hitbox.width);
+            JSON_FLOAT(hitbox, "height", object->hitbox.height);
+        } else {
+            object->hitbox.type = HITBOX_TYPE_NONE;
+        }
 
         cJSON* childrenJson = cJSON_GetObjectItemCaseSensitive(item, "children");
         if (cJSON_IsArray(childrenJson)) {
