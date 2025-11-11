@@ -8,6 +8,8 @@
 #include <wiiuse/wpad.h>
 #include <math.h>
 
+#include "gamemode.h"
+#include "Player.h"
 #include "../util/sort.h"
 #include "../constants.h"
 #include "../parse/level.h"
@@ -29,6 +31,33 @@ const GameState GAMESTATE_LEVEL = {
 };
 
 typedef enum {
+    OBJECT_TYPE_DECORATION,
+    OBJECT_TYPE_SOLID,
+    OBJECT_TYPE_HAZARD,
+    OBJECT_TYPE_PAD_YELLOW,
+    OBJECT_TYPE_PAD_BLUE,
+    OBJECT_TYPE_PAD_PINK,
+    OBJECT_TYPE_PAD_RED,
+    OBJECT_TYPE_PORTAL_GRAVITY_NORMAL,
+    OBJECT_TYPE_PORTAL_GRAVITY_INVERSE,
+    OBJECT_TYPE_PORTAL_MIRROR_NORMAL,
+    OBJECT_TYPE_PORTAL_MIRROR_INVERSE,
+    OBJECT_TYPE_PORTAL_SIZE_REGULAR,
+    OBJECT_TYPE_PORTAL_SIZE_MINI,
+    OBJECT_TYPE_PORTAL_SHIP,
+    OBJECT_TYPE_PORTAL_CUBE,
+    OBJECT_TYPE_PORTAL_BALL,
+    OBJECT_TYPE_PORTAL_UFO,
+    OBJECT_TYPE_ORB_YELLOW,
+    OBJECT_TYPE_ORB_BLUE,
+    OBJECT_TYPE_ORB_PINK,
+    OBJECT_TYPE_ORB_RED,
+    OBJECT_TYPE_ORB_GREEN,
+    OBJECT_TYPE_ORB_BLACK,
+    OBJECT_TYPE_ORB_DASH,
+} ObjectType;
+
+typedef enum {
     NONE,
     HAZARD,
     SOLID,
@@ -38,12 +67,64 @@ typedef enum {
     TRIGGER
 } CollisionType;
 
-typedef enum {
-    CUBE,
-    SHIP
-} GameMode;
+typedef struct {
+    float x;
+    float y;
+    float width;
+    float height;
+} Rect;
 
 ObjectData* objectDefaults = NULL;
+
+typedef struct {
+    float x;
+    float y;
+    float velX;
+    float velY;
+    float rotation;
+    float gravity;
+    float jumpVel;
+    float groundTop;
+    float groundBottom;
+    float gravityModifier;
+    bool gravityFlipped;
+    bool onGround;
+    bool canJump;
+    bool isRising;
+    bool isHolding;
+    bool queuedHold;  // For orbs
+    bool isDead;
+    Gamemode gameMode;
+    LevelObject* touchedRing;
+    SpriteInfo sprite;
+} Player;
+
+static void Player_init(Player* player) {
+    player->x = 0;
+    player->y = 15.0f;
+    player->velX = 5.770002f;
+    player->velY = 0.0f;
+    player->rotation = 0.0f;
+    player->gravity = 0.958199f;
+    player->jumpVel = 11.180032f;
+    player->groundBottom = 0.0f;
+    player->groundTop = 300.0f;
+    player->gravityModifier = 1.0f;
+    player->gravityFlipped = false;
+    player->onGround = false;
+    player->canJump = false;
+    player->isRising = false;
+    player->isHolding = false;
+    player->queuedHold = false;
+    player->isDead = false;
+    player->gameMode = GAMEMODE_CUBE;
+
+    player->sprite.x = 0.0f;
+    player->sprite.y = 0.0f;
+    player->sprite.rotation = 0.0f;
+    player->sprite.flipx = false;
+    player->sprite.flipy = false;
+}
 
 static s32 my_reader(void* cb_data, void* dst, s32 len) {
     FILE* f = (FILE*)cb_data;
@@ -52,17 +133,13 @@ static s32 my_reader(void* cb_data, void* dst, s32 len) {
 
 static int currentLevelId;
 
-static f32 lastX;
 static f32 camX;
 static f32 camY;
-static f32 velX;
-static f32 velY;
-static bool grounded;
-static bool bufferedInput;
-static f32 bufferedInputTime;
+
+static f32 lastX;
+
 static const f32 defaultSpeed = 10.386f;                           // Units: blocks per second
 static const f32 gravity = -0.876f * defaultSpeed * defaultSpeed;  // Units: blocks per second squared
-static f32 gravityModifier = 1.0f;
 
 static const f32 velCubeJump = 1.94f;
 static const f32 velYellowPad = 2.77f;
@@ -78,15 +155,7 @@ static const f32 velBlueOrb = -1.37f;
 
 static const f32 cameraVerticalBounds_2 = 75.0f;
 
-static SpriteInfo player = {
-    0,
-    15,
-    0,
-    false,
-    false,
-};
-
-static GameMode gameMode;
+Player player = { 0 };
 
 static LevelObject* objects;
 static int objectsSize;
@@ -176,6 +245,13 @@ bool intersectsY(const LevelObject* o, const Hitbox* hitbox, const SpriteInfo* p
         hitbox->y + o->y - hitbox->height / 2 >= player->y + 15.0);
 }
 
+bool intersectsRect(Rect* a, Rect* b) {
+    return (a->x <= b->x + b->width &&
+            a->x + a->width >= b->x &&
+            a->y <= b->y + b->height &&
+            a->y + a->height >= b->y);
+}
+
 int getCollisionType(const LevelObject* object) {
     switch (object->id) {
         case 8:
@@ -245,6 +321,245 @@ int getCollisionType(const LevelObject* object) {
     }
 }
 
+void hitGround(Player* player, bool reverseGravity) {
+    player->velY = 0.0f;
+
+    player->onGround = true;
+    player->canJump = true;
+
+    // float rotation = player->rotation;
+    // if (rotation != 0.0f) {
+    //     int degrees = (int)rotation;
+    //     if (degrees < 0) {
+    //         degrees %= 360;
+    //     } else {
+    //         degrees = degrees % 360 + 360;
+    //     }
+
+    //     if (!player->gravityFlipped) {
+    //         degrees = roundf((float)degrees / 90) * 90;
+    //     } else {
+    //         degrees = roundf((float)degrees / -90) * -90;
+    //     }
+
+    //     player->rotation = (float)degrees;
+    // }
+}
+
+void flipGravity(Player* player, bool flipped) {
+    if (player->gravityFlipped == flipped) {
+        return;
+    }
+
+    player->gravityFlipped = flipped;
+    player->gravityModifier *= -1.0f;
+
+    player->velY /= 2.0f;
+}
+
+static void destroyPlayer(Player* player) {
+    player->isDead = true;
+    SYS_Report("Player is dead.\n");
+    levelEnter();
+}
+
+static void propelPlayer(Player* player, float strength) {
+    player->onGround = false;
+    player->velY = player->gravityModifier * strength;
+}
+
+static void ringJump(Player* player) {
+    if (player->touchedRing != NULL && player->queuedHold && player->isHolding) {
+        player->queuedHold = false;
+        player->onGround = false;
+        player->velY = player->jumpVel * player->gravityModifier;
+        player->touchedRing = NULL;
+    }
+}
+
+void collidedWithObject(Player* player, LevelObject* object) {
+    Rect playerRect = {
+        player->x - 15.0f,
+        player->y - 15.0f,
+        30.0f,
+        30.0f
+    };
+
+    Hitbox* hb = &objectDefaults[object->id].hitbox;
+
+    Rect objectRect = {
+        object->x + hb->x - hb->width / 2,
+        object->y + hb->y - hb->height / 2,
+        hb->width,
+        hb->height
+    };
+
+    f32 leeway = 10.0f;
+
+    float halfH = playerRect.height / 2.0f;
+
+    float bottomPlayer = player->y - halfH;
+    float topPlayer = player->y + halfH;
+
+    float objMaxY = objectRect.y + objectRect.height;
+    float objMinY = objectRect.y;
+
+    if (!player->gravityFlipped || player->gameMode == GAMEMODE_SHIP) {
+        if (bottomPlayer >= objMaxY - leeway) {
+            if (player->velY < 0) {
+                player->y = objMaxY + halfH;
+                hitGround(player, player->gravityFlipped && player->gameMode == GAMEMODE_SHIP);
+                return;
+            }
+        }
+    }
+
+    if (player->gravityFlipped || player->gameMode == GAMEMODE_SHIP) {
+        if (topPlayer <= objMinY + leeway) {
+            if (player->velY > 0) {
+                player->y = objMinY - halfH;
+                hitGround(player, !player->gravityFlipped && player->gameMode == GAMEMODE_SHIP);
+                return;
+            }
+        }
+    }
+
+    Rect smallRect = {
+        objectRect.x + objectRect.width / 2.0f - objectRect.width / 2.0f * 0.3f,
+        objectRect.y + objectRect.height / 2.0f - objectRect.height / 2.0f * 0.3f,
+        objectRect.width * 0.3f,
+        objectRect.height * 0.3f
+    };
+    if (intersectsRect(&playerRect, &smallRect)) {
+        destroyPlayer(player);
+    }
+}
+
+void checkCollisions(Player* player, float dt) {
+    // Check collision with ground
+    if (player->y < 15 && player->gameMode != GAMEMODE_SHIP) {
+        if (player->gravityFlipped) {
+            destroyPlayer(player);
+            return;
+        }
+        player->y = 15;
+        hitGround(player, false);
+    } else if (player->y > 1200) {
+        destroyPlayer(player);
+        return;
+    }
+
+    if (player->gameMode == GAMEMODE_SHIP) {
+        if (player->y > player->groundTop - 15.0f) {
+            player->y = player->groundTop - 15.0f;
+            hitGround(player, !player->gravityFlipped);
+        } else if (player->y < player->groundBottom + 15.0f) {
+            player->y = player->groundBottom + 15.0f;
+            hitGround(player, player->gravityFlipped);
+        }
+    }
+
+    // Create hazards list
+    static int hazardsCapacity = 0;
+    static LevelObject** hazards = NULL;
+    int hazardsCount = 0;
+
+    if (!hazards) {
+        hazardsCapacity = 100;
+        hazards = malloc(sizeof(LevelObject*) * hazardsCapacity);
+        if (!hazards) {
+            SYS_Report("Error.\n");
+            exit(EXIT_FAILURE);
+        }
+    }
+
+    Rect playerRect = {
+        player->x - 15.0f,
+        player->y - 15.0f,
+        30.0f,
+        30.0f
+    };
+
+    for (int i = 0; i < objectsSize; i++) {
+        LevelObject* object = &objects[i];
+
+        if (getCollisionType(object) == HAZARD) {
+            if (hazardsCount == hazardsCapacity) {
+                // Resize
+                hazards = realloc(hazards, sizeof(LevelObject*) * (hazardsCapacity *= 2));
+                if (!hazards) {
+                    SYS_Report("Error.\n");
+                    exit(EXIT_FAILURE);
+                }
+            }
+            hazards[hazardsCount++] = object;
+            continue;
+        }
+
+        if (objectDefaults[object->id].hitbox.type != HITBOX_TYPE_BOX) {
+            continue;
+        }
+
+        Hitbox* hb = &objectDefaults[object->id].hitbox;
+
+        Rect objectRect = {
+            object->x + hb->x - hb->width / 2,
+            object->y + hb->y - hb->height / 2,
+            hb->width,
+            hb->height
+        };
+
+        if (intersectsRect(&playerRect, &objectRect)) {
+            switch (getCollisionType(object)) {
+                case PORTAL:
+                    switch (object->id) {
+                        case 10:
+                            flipGravity(player, false);
+                            break;
+                        case 11:
+                            flipGravity(player, true);
+                            break;
+                        case 12:
+                            player->gameMode = GAMEMODE_CUBE;
+                            break;
+                        case 13:
+                            player->gameMode = GAMEMODE_SHIP;
+                            break;
+                    }
+                    break;
+                case PAD:
+                    propelPlayer(player, 16.0f);
+                    break;
+                case ORB:
+                    player->touchedRing = object;
+                    ringJump(player);
+                    break;
+                default:
+                    collidedWithObject(player, object);
+                    break;
+            }
+        }
+    }
+
+    for (int i = 0; i < hazardsCount; i++) {
+        LevelObject* hazard = hazards[i];
+
+        Hitbox* hb = &objectDefaults[hazard->id].hitbox;
+
+        Rect hazardRect = {
+            hazard->x + hb->x - hb->width / 2,
+            hazard->y + hb->y - hb->height / 2,
+            hb->width,
+            hb->height
+        };
+
+        if (intersectsRect(&playerRect, &hazardRect)) {
+            destroyPlayer(player);
+        }
+    }
+    // Clear hazards list
+}
+
 int loadLevel(int levelId) {
     currentLevelId = levelId;
 
@@ -271,23 +586,12 @@ int loadLevel(int levelId) {
 }
 
 static void levelEnter() {
+    lastX = 0.0f;
+
     camX = 0.0f;
     camY = cameraVerticalBounds_2;
 
-    velX = defaultSpeed * 30.0f;
-    velY = 0.0f;
-
-    player.x = 0;
-    player.y = 15;
-    player.rotation = 0;
-
-    gravityModifier = 1.0f;
-
-    grounded = true;
-    bufferedInput = false;
-    bufferedInputTime = 0;
-
-    gameMode = CUBE;
+    Player_init(&player);
 
     colorInit();
 
@@ -317,184 +621,374 @@ static void levelExit() {
     RDR_RenderCacheClear(&renderCache);
 }
 
-static void levelRun(f32 deltaTime) {
-    lastX = player.x;
+static void updateCamera(Player* player) {
+    float halfHeight = view_height / viewScale / 2.0f;
 
-    u32 pressed = WPAD_ButtonsDown(0);
-    u32 held = WPAD_ButtonsHeld(0);
+    float screenTop = camY + halfHeight;
+    float screenBottom = camY - halfHeight;
 
-    switch (gameMode) {
-        case CUBE:
-            velY += gravity * gravityModifier * deltaTime;
+    float upperBound = 90.0f;
+    float lowerBound = 120.0f;
 
-            if (velY * gravityModifier < -2.6f * defaultSpeed) {
-                velY = -2.6f * gravityModifier * defaultSpeed;
+    if (player->gravityFlipped) {
+        // Swap
+        float temp = upperBound;
+        upperBound = lowerBound;
+        lowerBound = temp;
+    }
+
+    float candidatePosition = camY;
+    float easeValue = 10.0f;
+
+    switch (player->gameMode) {
+        case GAMEMODE_CUBE:
+        default:
+            if (player->y + upperBound > screenTop) {
+                candidatePosition = player->y + upperBound - halfHeight;
+            } else if (player->y - lowerBound < screenBottom) {
+                candidatePosition = player->y - lowerBound + halfHeight;
             }
-
-            if (held & WPAD_BUTTON_A) {
-                if (grounded) {
-                    velY = velCubeJump * gravityModifier * defaultSpeed;
-                    grounded = false;
-                }
-            }
-
-            if (bufferedInput && bufferedInputTime > 2 / 60.0f) {
-                bufferedInput = false;
-                bufferedInputTime = 0;
-            } else {
-                bufferedInputTime += deltaTime;
-            }
-
-            if (pressed & WPAD_BUTTON_A) {
-                bufferedInput = true;
-                bufferedInputTime = 0;
-            }
-
             break;
-        case SHIP:
-            if (held & WPAD_BUTTON_A) {
-                velY = (gravityModifier * deltaTime * defaultSpeed);
-            }
-
+        case GAMEMODE_SHIP:
+        case GAMEMODE_BALL:
+            candidatePosition = (player->groundTop + player->groundBottom) / 2.0f;
+            easeValue = 30.0f;
             break;
     }
+
+    if (candidatePosition - halfHeight < -60.0f) {
+        candidatePosition = -60.0f + halfHeight;
+    }
+
+    camY += (candidatePosition - camY) / easeValue;
+}
+
+static void updateVisibility() {
+}
+
+static bool isFalling(Player* player) {
+    // if (player->gravityFlipped) {
+    //     return player->velY > 0.0f;
+    // } else {
+    //     return player->velY < 0.0f;
+    // }
+    if (player->gravityFlipped) {
+        return player->velY > player->gravity + player->gravity;
+    } else {
+        return player->velY < player->gravity + player->gravity;
+    }
+}
+
+// Update Y velocity if necessary
+static void updateJump(Player* player, f32 dt) {
+    switch (player->gameMode) {
+        case GAMEMODE_CUBE:
+            if (player->isHolding && player->canJump) {
+                player->isRising = true;
+                player->onGround = false;
+                player->canJump = false;
+                player->queuedHold = false;
+
+                player->velY = player->jumpVel * player->gravityModifier;
+            } else {
+                if (!player->isRising) {
+                    player->canJump = false;
+
+                    player->velY -= player->gravity * dt * player->gravityModifier;
+
+                    // terminal velocity
+                    if (player->gravityFlipped) {
+                        if (player->velY > 15.0f) {
+                            player->velY = 15.0f;
+                        }
+                    } else {
+                        if (player->velY < -15.0f) {
+                            player->velY = -15.0f;
+                        }
+                    }
+
+                    if (isFalling(player)) {
+                        if (player->gravityFlipped && player->velY > 4.0f) {
+                            player->onGround = false;
+                        } else if (!player->gravityFlipped && player->velY < -4.0f) {
+                            player->onGround = false;
+                        }
+                    }
+                } else {
+                    player->velY -= player->gravity * dt * player->gravityModifier;
+
+                    if (isFalling(player)) {
+                        player->isRising = false;
+                        player->onGround = false;
+                    }
+                }
+            }
+            break;
+        case GAMEMODE_SHIP: {
+            float shipAccel;
+            if (!player->isHolding && !isFalling(player)) {
+                shipAccel = 1.2f;
+            } else if (player->isHolding) {
+                shipAccel = -1.0f;
+            } else {
+                shipAccel = 0.8f;
+            }
+
+            float extraBoost = (player->isHolding && isFalling(player)) ? 0.5f : 0.4f;
+
+            player->velY -= dt * player->gravity * player->gravityModifier * extraBoost * shipAccel;
+
+            if (player->gravityFlipped) {
+                if (player->velY < -8.0f) {
+                    player->velY = -8.0f;
+                }
+                if (player->velY > 0.8f * 8.0f) {
+                    player->velY = 0.8f * 8.0f;
+                }
+            } else {
+                if (player->velY < 0.8f * -8.0f) {
+                    player->velY = 0.8f * -8.0f;
+                }
+                if (player->velY > 8.0f) {
+                    player->velY = 8.0f;
+                }
+            }
+            if (player->isHolding) {
+                player->onGround = false;
+            }
+        } break;
+        default:
+            break;
+    }
+}
+
+static void updatePlayer(Player* player, f32 dt) {
+    f32 slow_dt = dt * 0.9f;
+    updateJump(player, slow_dt);
+
+    // Integrate position
+    player->x += player->velX * slow_dt;
+    player->y += player->velY * slow_dt;
+}
+
+static void update(f32 dt) {
+    lastX = player.x;
+
+    f32 deltaFrames = dt * 60.0f;
+    if (deltaFrames > 2.0f) {
+        deltaFrames = 2.0f;
+    }
+
+    f32 step = deltaFrames / 4.0f;
+    for (int i = 0; i < 4; i++) {
+        updatePlayer(&player, step);
+        checkCollisions(&player, step);
+    }
+
+    updateCamera(&player);
+    updateVisibility();
+}
+
+static void levelRun(f32 deltaTime) {
+    u32 held = WPAD_ButtonsHeld(0);
+
+    u32 pressed = WPAD_ButtonsDown(0);
+    if (pressed & WPAD_BUTTON_A) {
+        player.isHolding = true;
+        player.queuedHold = true;
+    }
+
+    u32 released = WPAD_ButtonsUp(0);
+    if (released & WPAD_BUTTON_A) {
+        player.isHolding = false;
+        player.queuedHold = false;
+    }
+
+    update(deltaTime);
+
+    // switch (gameMode) {
+    //     case GAMEMODE_CUBE:
+
+    //         break;
+    //     case GAMEMODE_SHIP:
+    //         const f32 shipGravity = -0.9582 * 30.0f;
+
+    //         if (held & WPAD_BUTTON_A) {
+    //             velY -= shipGravity * gravityModifier * deltaTime;
+    //         } else {
+    //             velY += shipGravity * gravityModifier * deltaTime;
+    //         }
+
+    //         // terminal velocity
+    //         if (velY * gravityModifier < -1.0f * defaultSpeed) {
+    //             velY = -1.0f * gravityModifier * defaultSpeed;
+    //         } else if (velY * gravityModifier > 1.0f * defaultSpeed) {
+    //             velY = 1.0f * gravityModifier * defaultSpeed;
+    //         }
+
+    //         break;
+    // }
 
     if (pressed & WPAD_BUTTON_B) {
         changeState(&GAMESTATE_MENU, .5);
     }
 
-    player.x += velX * deltaTime;
+    // player.x += velX * deltaFrames;
 
-    // Check Hazard collisions
-    for (int i = 0; i < objectsSize; i++) {
-        LevelObject* object = &objects[i];
+    // // Check Hazard collisions
+    // for (int i = 0; i < objectsSize; i++) {
+    //     LevelObject* object = &objects[i];
 
-        Hitbox* objectHitbox = &objectDefaults[object->id].hitbox;
-        if (intersects(object, objectHitbox, &player)) {
-            if (getCollisionType(object) == HAZARD) {
-                SYS_Report("ded\n");
-                // TODO kill player
-            }
+    //     Hitbox* objectHitbox = &objectDefaults[object->id].hitbox;
+    //     if (intersects(object, objectHitbox, &player)) {
+    //         if (getCollisionType(object) == HAZARD) {
+    //             SYS_Report("ded\n");
+    //             // TODO kill player
+    //         }
+    //     }
+    // }
+
+    // // Check X collisions
+    // for (int i = 0; i < objectsSize; i++) {
+    //     LevelObject* object = &objects[i];
+
+    //     Hitbox* objectHitbox = &objectDefaults[object->id].hitbox;
+    //     if (intersects(object, objectHitbox, &player)) {
+    //         // SYS_Report("there was a collision (x)!\n");  // crash the game
+    //         float overlapX = fmin(object->x + objectHitbox->x + objectHitbox->width / 2, player.x + 15.0) - fmax(player.x - 15, object->x + objectHitbox->x - objectHitbox->width / 2);
+
+    //         if (player.x < object->x + objectHitbox->x) {
+    //             SYS_Report("ded\n");
+    //             // player.x -= overlapX;  // move left
+    //         }
+    //     }
+    // }
+
+    // // player.y += velY * deltaFrames;
+
+    if (!player.onGround) {
+        switch (player.gameMode) {
+            case GAMEMODE_CUBE:
+                player.rotation += (5.0f / 23.0f) * defaultSpeed * 180.0f * deltaTime * player.gravityModifier;
+                break;
+
+            case GAMEMODE_SHIP:
+                player.rotation = -atan2(player.velY, player.velX) * (180.0f / M_PI);
+                break;
         }
-    }
-
-    // Check X collisions
-    for (int i = 0; i < objectsSize; i++) {
-        LevelObject* object = &objects[i];
-
-        Hitbox* objectHitbox = &objectDefaults[object->id].hitbox;
-        if (intersects(object, objectHitbox, &player)) {
-            // SYS_Report("there was a collision (x)!\n");  // crash the game
-            float overlapX = fmin(object->x + objectHitbox->x + objectHitbox->width / 2, player.x + 15.0) - fmax(player.x - 15, object->x + objectHitbox->x - objectHitbox->width / 2);
-
-            if (player.x < object->x + objectHitbox->x) {
-                SYS_Report("ded\n");
-                // player.x -= overlapX;  // move left
-            }
+    } else {
+        player.rotation = fmodf(player.rotation, 360.0f);
+        if (player.rotation < 0.0f) {
+            player.rotation += 360.0f;
         }
+
+        float targetRotation = roundf(player.rotation / 90.0f) * 90.0f;
+
+        player.rotation += (targetRotation - player.rotation) / 3.0f;
     }
 
-    player.y += velY * deltaTime * 30.0f;
-    player.rotation += (5.0f / 23.0f) * defaultSpeed * 180.0f * deltaTime * gravityModifier;
+    // grounded = false;
 
-    grounded = false;
+    // // Check Y collisions
+    // for (int i = 0; i < objectsSize; i++) {
+    //     LevelObject* object = &objects[i];
 
-    // Check Y collisions
-    for (int i = 0; i < objectsSize; i++) {
-        LevelObject* object = &objects[i];
+    //     Hitbox* objectHitbox = &objectDefaults[object->id].hitbox;
+    //     if (intersects(object, objectHitbox, &player)) {
+    //         // SYS_Report("there was a collision (y)!\n");  // crash the game
 
-        Hitbox* objectHitbox = &objectDefaults[object->id].hitbox;
-        if (intersects(object, objectHitbox, &player)) {
-            // SYS_Report("there was a collision (y)!\n");  // crash the game
+    //         float overlapY = fmin(object->y + objectHitbox->y + objectHitbox->height / 2, player.y + 15.0) - fmax(player.y - 15, object->y + objectHitbox->y - objectHitbox->height / 2);
+    //         if (getCollisionType(object) == SOLID) {
+    //             if (player.y > object->y + objectHitbox->y && gravityModifier > 0.0f) {
+    //                 player.y += overlapY;  // move up
+    //                 velY = 0;
+    //                 player.rotation = roundf(player.rotation / 90.0f) * 90.0f;
+    //                 grounded = true;
+    //             } else if (player.y < object->y + objectHitbox->y && gravityModifier < 0.0f) {
+    //                 player.y -= overlapY;  // move down
+    //                 velY = 0;
+    //                 player.rotation = roundf(player.rotation / 90.0f) * -90.0f;
+    //                 grounded = true;
+    //             } else {
+    //                 SYS_Report("ded\n");
+    //             }
+    //         }
+    //     }
+    // }
 
-            float overlapY = fmin(object->y + objectHitbox->y + objectHitbox->height / 2, player.y + 15.0) - fmax(player.y - 15, object->y + objectHitbox->y - objectHitbox->height / 2);
-            if (getCollisionType(object) == SOLID) {
-                if (player.y > object->y + objectHitbox->y && gravityModifier > 0.0f) {
-                    player.y += overlapY;  // move up
-                    velY = 0;
-                    player.rotation = roundf(player.rotation / 90.0f) * 90.0f;
-                    grounded = true;
-                } else if (player.y < object->y + objectHitbox->y && gravityModifier < 0.0f) {
-                    player.y -= overlapY;  // move down
-                    velY = 0;
-                    player.rotation = roundf(player.rotation / 90.0f) * -90.0f;
-                    grounded = true;
-                } else {
-                    SYS_Report("ded\n");
-                }
-            }
-        }
-    }
+    // if (player.y < 15) {
+    //     velY = 0;
+    //     player.y = 15;
+    //     player.rotation = roundf(player.rotation / 90.0f) * 90.0f;
+    //     grounded = true;
+    // }
 
-    if (player.y < 15) {
-        velY = 0;
-        player.y = 15;
-        player.rotation = roundf(player.rotation / 90.0f) * 90.0f;
-        grounded = true;
-    }
+    // // Check Pad collisions
+    // for (int i = 0; i < objectsSize; i++) {
+    //     LevelObject* object = &objects[i];
 
-    // Check Pad collisions
-    for (int i = 0; i < objectsSize; i++) {
-        LevelObject* object = &objects[i];
+    //     Hitbox* objectHitbox = &objectDefaults[object->id].hitbox;
 
-        Hitbox* objectHitbox = &objectDefaults[object->id].hitbox;
-
-        if (intersects(object, objectHitbox, &player)) {
-            switch (getCollisionType(object)) {
-                case PAD:
-                    switch (object->id) {
-                        case 35:
-                            velY = velYellowPad * gravityModifier * defaultSpeed;
-                            break;
-                        case 67:
-                            velY = velBluePad * gravityModifier * defaultSpeed;
-                            gravityModifier *= -1.0f;
-                            break;
-                    }
-                    break;
-                case PORTAL:
-                    switch (object->id) {
-                        case 10:
-                            gravityModifier = 1.0f;
-                            break;
-                        case 11:
-                            gravityModifier = -1.0f;
-                            break;
-                        case 12:
-                            gameMode = CUBE;
-                            break;
-                        case 13:
-                            gameMode = SHIP;
-                            break;
-                    }
-                    break;
-                case ORB:
-                    if (WPAD_ButtonsDown(0) & WPAD_BUTTON_A || bufferedInput) {
-                        if (bufferedInput) {
-                            bufferedInput = false;
-                        }
-                        switch (object->id) {
-                            case 36:
-                                velY = velYellowOrb * gravityModifier * defaultSpeed;
-                                break;
-                            case 84:
-                                velY = velBlueOrb * gravityModifier * defaultSpeed;
-                                gravityModifier *= -1.0f;
-                                break;
-                        }
-                    }
-                    break;
-            }
-        }
-    }
+    //     if (intersects(object, objectHitbox, &player)) {
+    //         switch (getCollisionType(object)) {
+    //             case PAD:
+    //                 switch (object->id) {
+    //                     case 35:
+    //                         velY = velYellowPad * gravityModifier * defaultSpeed;
+    //                         break;
+    //                     case 67:
+    //                         velY = velBluePad * gravityModifier * defaultSpeed;
+    //                         gravityModifier *= -1.0f;
+    //                         break;
+    //                 }
+    //                 break;
+    //             case PORTAL:
+    //                 switch (object->id) {
+    //                     case 10:
+    //                         gravityModifier = 1.0f;
+    //                         break;
+    //                     case 11:
+    //                         gravityModifier = -1.0f;
+    //                         break;
+    //                     case 12:
+    //                         gameMode = GAMEMODE_CUBE;
+    //                         break;
+    //                     case 13:
+    //                         gameMode = GAMEMODE_SHIP;
+    //                         break;
+    //                 }
+    //                 break;
+    //             case ORB:
+    //                 // if (WPAD_ButtonsDown(0) & WPAD_BUTTON_A || bufferedInput) {
+    //                 //     if (bufferedInput) {
+    //                 //         bufferedInput = false;
+    //                 //     }
+    //                 //     switch (object->id) {
+    //                 //         case 36:
+    //                 //             velY = velYellowOrb * gravityModifier * defaultSpeed;
+    //                 //             break;
+    //                 //         case 84:
+    //                 //             velY = velBlueOrb * gravityModifier * defaultSpeed;
+    //                 //             gravityModifier *= -1.0f;
+    //                 //             break;
+    //                 //     }
+    //                 // }
+    //                 break;
+    //         }
+    //     }
+    // }
 
     camX = player.x + 2.5f * 30.0f;
 
-    if (player.y < camY - cameraVerticalBounds_2) {
-        camY = player.y + cameraVerticalBounds_2;
-    } else if (player.y > camY + cameraVerticalBounds_2) {
-        camY = player.y - cameraVerticalBounds_2;
-    }
+    player.sprite.x = player.x;
+    player.sprite.y = player.y;
+    player.sprite.rotation = player.rotation;
+
+    // if (player.y < camY - cameraVerticalBounds_2) {
+    //     camY = player.y + cameraVerticalBounds_2;
+    // } else if (player.y > camY + cameraVerticalBounds_2) {
+    //     camY = player.y - cameraVerticalBounds_2;
+    // }
 
     f32 viewBoundsL = camX - (view_width / 2.0f) / viewScale;
     f32 viewBoundsR = camX + (view_width / 2.0f) / viewScale;
@@ -761,9 +1255,17 @@ static void levelRender() {
 
         RDR_drawSpriteFromMap(object->tex, (SpriteInfo){ object->x, object->y, object->rotation, object->flipx, object->flipy }, object->colorChannel, view);
     }
+    switch (player.gameMode) {
+        case GAMEMODE_CUBE:
+            RDR_drawSpriteFromMap(ht_search("player_01_001.png"), player.sprite, 1011, view);
+            RDR_drawSpriteFromMap(ht_search("player_01_2_001.png"), player.sprite, 1012, view);
+            break;
 
-    RDR_drawSpriteFromMap(ht_search("player_01_001.png"), player, 1011, view);
-    RDR_drawSpriteFromMap(ht_search("player_01_2_001.png"), player, 1012, view);
+        case GAMEMODE_SHIP:
+            RDR_drawSpriteFromMap(ht_search("ship_01_001.png"), player.sprite, 1011, view);
+            RDR_drawSpriteFromMap(ht_search("ship_01_2_001.png"), player.sprite, 1012, view);
+            break;
+    }
 
     for (; i < renderCache.size; i++) {
         RenderObject* object = &renderCache.objects[i];
@@ -801,7 +1303,7 @@ static void levelRender() {
     guMtxTransApply(model, model, 0.0f, offset, 0.0f);
     offset = Font_RenderText(&font, &fontTexture, buf, 16.0f, ALIGN_LEFT, 600.0f, model);
 
-    snprintf(buf, 100, "vel: %.3f, %.3f", velX, velY);
+    snprintf(buf, 100, "vel: %.3f, %.3f", player.velX, player.velY);
     guMtxTransApply(model, model, 0.0f, offset, 0.0f);
     offset = Font_RenderText(&font, &fontTexture, buf, 16.0f, ALIGN_LEFT, 600.0f, model);
 
@@ -823,30 +1325,4 @@ static void levelRender() {
     //     SYS_ResetSystem(SYS_POWEROFF, 0, 0);
     //     // SYS_ResetSystem(SYS_RETURNTOMENU, 0, 0);
     // }
-}
-
-void runLevel() {
-    // while (HWButton == -1) {
-    //  if (gettime() - jumpStartTime < jumpTime) {
-    //      // SYS_Report("Time left: %u\n", gettime() - jumpStartTime);
-    //      u64 dy = (gettime() - jumpStartTime) / 600000;
-    //      u64 newY = dy;
-    //      if ((gettime() - jumpStartTime) < jumpTime / 2) {
-    //      } else {
-    //          newY = (jumpTime - (gettime() - jumpStartTime)) / 600000;
-    //      }
-    //      player.y = newY + 15;
-    //      // player.rotation = jumpTime / (gettime() - jumpStartTime) * 90;
-    //  }
-
-    // if (pressed & WPAD_BUTTON_A) {
-    //     SYS_Report("Player jumped!!! at time: %u\n", gettime());
-    //     jumpStartTime = gettime();
-    // }
-
-    // --------------------------------------------------------------------
-    // Game logic
-    // --------------------------------------------------------------------
-
-    // Calculate view and fade bounds based on camera position
 }
