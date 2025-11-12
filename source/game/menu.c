@@ -9,6 +9,7 @@
 #include "../gfx.h"
 #include "screenManager.h"
 #include "gamelevel.h"
+#include "../parse/levelinfo.h"
 
 typedef struct {
     u32 startColor;
@@ -25,7 +26,7 @@ static MenuColors backgroundColor;
 static int levelIndex = 0;
 
 static const f32 viewScale = 1.5f;
-static const int numLevels = sizeof(levelNames) / sizeof(levelNames[0]);
+static const int numLevels = sizeof(mainLevels) / sizeof(mainLevels[0]);
 
 static void menuEnter();
 static void menuExit();
@@ -86,12 +87,12 @@ static void menuRun(f32 deltaTime) {
     if (pressed & WPAD_BUTTON_LEFT) {
         levelIndex--;
         if (levelIndex < 0) {
-            levelIndex = numLevels - 1;
+            levelIndex = numLevels;
         }
     }
     if (pressed & WPAD_BUTTON_RIGHT) {
         levelIndex++;
-        if (levelIndex == numLevels) {
+        if (levelIndex == numLevels + 1) {
             levelIndex = 0;
         }
     }
@@ -99,8 +100,11 @@ static void menuRun(f32 deltaTime) {
     backgroundColor = menuColors[levelIndex % (sizeof(menuColors) / sizeof(menuColors[0]))];
 
     if (pressed & WPAD_BUTTON_A) {
-        changeState(&GAMESTATE_LEVEL, .5);
-        loadLevel(levelIndex);
+        LevelInfo* levelInfo = getLevelInfoById(mainLevels[levelIndex]);
+        if (levelInfo != NULL) {
+            changeState(&GAMESTATE_LEVEL, .5);
+            loadLevel(mainLevels[levelIndex]);
+        }
     }
 }
 
@@ -115,6 +119,8 @@ static void menuRender() {
     RDR_drawLine(view, camY, viewScale);
 
     GFX_ResetDrawMode();
+
+    LevelInfo* levelInfo = levelIndex == numLevels ? NULL : getLevelInfoById(mainLevels[levelIndex]);
 
     // Set up camera view matrix
     guMtxTrans(view, 0, 0, -10.0f);
@@ -160,9 +166,9 @@ static void menuRender() {
     // circle
     const int circleSpacing = 20;
     texture_info* circle = ht_search("d_link_b_01_color_001.png");
-    f32 circleXPos = ((numLevels - 1) * circleSpacing) / 2.0f;
-    f32 circleYPos = ((view_height / 2) / viewScale) - (circle->spriteSize.y / 2) - 12;
-    for (int i = 0; i < numLevels; i++) {
+    f32 circleXPos = ((numLevels)*circleSpacing) / 2.0f;
+    f32 circleYPos = ((view_height / 2) / viewScale) - (circle->spriteSize.y / 2) - 16;
+    for (int i = 0; i < numLevels + 1; i++) {
         u32 color = 0x7f7f7fff;
         if (i == levelIndex) {
             color = 0xffffffff;
@@ -170,23 +176,35 @@ static void menuRender() {
         RDR_drawSpriteFromMap2(circle, (SpriteInfo){ -circleXPos + (circleSpacing * i), -circleYPos, 0, false, false }, color, false, view);
     }
 
-    // gray background
-    RDR_drawRect(&square02, 0, 90, 516, 146, 0x0000007f);
-    RDR_drawRect(&square02, 0, -45, 516, 36, 0x0000007f);
-    RDR_drawRect(&square02, 0, -118, 516, 36, 0x0000007f);
+    if (levelInfo != NULL) {
+        // gray background
+        RDR_drawRect(&square02, 0, 90, 516, 146, 0x0000007f);
+        RDR_drawRect(&square02, 0, -45, 516, 36, 0x0000007f);
+        RDR_drawRect(&square02, 0, -118, 516, 36, 0x0000007f);
 
-    // text
-    f32 titleFontSize = 30;
-    Mtx model, modelView;
-    guMtxTrans(model, 0.0f, 2.0f, 0.0f);
-    guMtxConcat(view, model, modelView);
-    Font_RenderText(&font, &fontTexture, "Normal Mode", 18, ALIGN_CENTER, 300, modelView);
-    guMtxTrans(model, 0.0f, -48.0f, 0.0f);
-    guMtxConcat(view, model, modelView);
-    Font_RenderText(&font, &fontTexture, "Practice Mode", 18, ALIGN_CENTER, 300, modelView);
-    guMtxTrans(model, 0.0f, 90 - (titleFontSize / 2), 0.0f);
-    guMtxConcat(view, model, modelView);
-    Font_RenderText(&font, &fontTexture, (char*)levelNames[levelIndex], titleFontSize, ALIGN_CENTER, 516, modelView);
+        // text
+        const f32 titleFontSize = 30;
+        Mtx model, modelView;
+        guMtxTrans(model, 0.0f, 2.0f, 0.0f);
+        guMtxConcat(view, model, modelView);
+        Font_RenderText(&font, &fontTexture, "Normal Mode", 18.0f, ALIGN_CENTER, 300, modelView);
+        guMtxTrans(model, 0.0f, -48.0f, 0.0f);
+        guMtxConcat(view, model, modelView);
+        Font_RenderText(&font, &fontTexture, "Practice Mode", 18.0f, ALIGN_CENTER, 300, modelView);
+        guMtxTrans(model, 0.0f, 90 - (titleFontSize / 2), 0.0f);
+        guMtxConcat(view, model, modelView);
+        Font_RenderText(&font, &fontTexture, levelInfo->name, titleFontSize, ALIGN_CENTER, 516, modelView);
+    } else if (levelIndex == numLevels) {
+        Mtx model, modelView;
+        guMtxTrans(model, 0.0f, 48.0f, 0.0f);
+        guMtxConcat(view, model, modelView);
+        Font_RenderText(&font, &fontTexture, "Coming Soon!", 32.0f, ALIGN_CENTER, view_width, modelView);
+    } else {
+        Mtx model, modelView;
+        guMtxTrans(model, 0.0f, 16.0f, 0.0f);
+        guMtxConcat(view, model, modelView);
+        Font_RenderText(&font, &fontTexture, "Invalid level ID", 32.0f, ALIGN_CENTER, view_width, modelView);
+    }
 
     GFX_ResetDrawMode();
 }

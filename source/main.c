@@ -25,10 +25,6 @@
 #include "game/homescreen.h"
 #include "game/screenManager.h"
 
-#define DEFAULT_FIFO_SIZE (256 * 1024)
-#define CLIPPING_X (view_width / 2 + 64)
-#define CLIPPING_Y (view_width / 2 + 64)
-
 s8 HWButton = -1;
 
 void wiiPowerPressed() {
@@ -91,7 +87,7 @@ int main(int argc, char** argv) {
     WPAD_Init();
 
     // Legal notice, blocking call
-    // legalNotice(&font, &fontTexture, &HWButton);
+    legalNotice(&font, &fontTexture, &HWButton);
 
     TPLFile backgroundTPL;
     if (TPL_OpenTPLFromFile(&backgroundTPL, ASSETS_PATH "background.tpl") != 1) {
@@ -170,10 +166,10 @@ int main(int argc, char** argv) {
         runState(1.0f / 60.0f);
 
         GX_DrawDone();
-        GFX_SwapBuffers();
 
         // Wait for next frame
         VIDEO_WaitVSync();
+        GFX_SwapBuffers();
     }
 
     return 0;

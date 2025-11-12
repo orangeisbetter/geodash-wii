@@ -92,7 +92,7 @@ void Font_RenderGlyph(BMFont* font, f32* posx, f32* posy, char character) {
     *posx += glyph.xadvance;
 }
 
-void Font_RenderLine(BMFont* font, f32 fontSize, Font_Alignment align, Mtx modelView, f32* posx, f32* posy, char* line, int length, int width) {
+void Font_RenderLine(BMFont* font, f32 fontSize, Font_Alignment align, Mtx modelView, f32* posx, f32* posy, const char* line, int length, int width) {
     Mtx posMtx;
     guMtxCopy(modelView, posMtx);
 
@@ -134,7 +134,7 @@ Font_Word trimWord(BMFont* font, Font_Word word) {
     return word;
 }
 
-f32 Font_RenderText(BMFont* font, GXTexObj* fontTexture, char* text, f32 fontSize, Font_Alignment align, f32 maxWidth, Mtx modelView) {
+f32 Font_RenderText(BMFont* font, GXTexObj* fontTexture, const char* text, f32 fontSize, Font_Alignment align, f32 maxWidth, Mtx modelView) {
     int wordsCapacity = 10;
     Font_Word* words = (Font_Word*)malloc(sizeof(Font_Word) * wordsCapacity);
     if (words == NULL)

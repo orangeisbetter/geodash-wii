@@ -59,13 +59,13 @@ typedef enum {
 } Font_Alignment;
 
 typedef struct {
-    char* ptr;
+    const char* ptr;
     int length;
     int width;
 } Font_Word;
 
 int parseBMFontFile(const char* filepath, BMFont* font);
 void Font_RenderGlyph(BMFont* font, f32* posx, f32* posy, char character);
-void Font_RenderLine(BMFont* font, f32 fontSize, Font_Alignment align, Mtx modelView, f32* posx, f32* posy, char* line, int length, int width);
+void Font_RenderLine(BMFont* font, f32 fontSize, Font_Alignment align, Mtx modelView, f32* posx, f32* posy, const char* line, int length, int width);
 Font_Word trimWord(BMFont* font, Font_Word word);
-f32 Font_RenderText(BMFont* font, GXTexObj* fontTexture, char* text, f32 fontSize, Font_Alignment align, f32 maxWidth, Mtx modelView);
+f32 Font_RenderText(BMFont* font, GXTexObj* fontTexture, const char* text, f32 fontSize, Font_Alignment align, f32 maxWidth, Mtx modelView);

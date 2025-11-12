@@ -1,0 +1,8 @@
+[ ] fix canJump flag usage
+[ ] cube rotation
+[ ] fading color triggers
+[ ] Horizontal portals should not halve velocity (for some reason that's how it works, idk)
+[ ] particles and streaks
+[ ] proper death handling (play death sound, freeze for a few frames, then restart)
+[X] asynchronous level loading (use multithreading)
+[ ] sectioning of level for rendering and physics optimization and expedition

@@ -7,6 +7,7 @@
 #include <mp3player.h>
 #include <wiiuse/wpad.h>
 #include <math.h>
+#include <ogc/lwp.h>
 
 #include "gamemode.h"
 #include "Player.h"
@@ -17,6 +18,7 @@
 #include "../color.h"
 #include "../gfx.h"
 #include "menu.h"
+#include "../parse/levelinfo.h"
 
 static void levelEnter();
 static void levelExit();
@@ -67,71 +69,17 @@ typedef enum {
     TRIGGER
 } CollisionType;
 
-typedef struct {
-    float x;
-    float y;
-    float width;
-    float height;
-} Rect;
-
 ObjectData* objectDefaults = NULL;
-
-typedef struct {
-    float x;
-    float y;
-    float velX;
-    float velY;
-    float rotation;
-    float gravity;
-    float jumpVel;
-    float groundTop;
-    float groundBottom;
-    float gravityModifier;
-    bool gravityFlipped;
-    bool onGround;
-    bool canJump;
-    bool isRising;
-    bool isHolding;
-    bool queuedHold;  // For orbs
-    bool isDead;
-    Gamemode gameMode;
-    LevelObject* touchedRing;
-    SpriteInfo sprite;
-} Player;
-
-static void Player_init(Player* player) {
-    player->x = 0;
-    player->y = 15.0f;
-    player->velX = 5.770002f;
-    player->velY = 0.0f;
-    player->rotation = 0.0f;
-    player->gravity = 0.958199f;
-    player->jumpVel = 11.180032f;
-    player->groundBottom = 0.0f;
-    player->groundTop = 300.0f;
-    player->gravityModifier = 1.0f;
-    player->gravityFlipped = false;
-    player->onGround = false;
-    player->canJump = false;
-    player->isRising = false;
-    player->isHolding = false;
-    player->queuedHold = false;
-    player->isDead = false;
-    player->gameMode = GAMEMODE_CUBE;
-
-    player->sprite.x = 0.0f;
-    player->sprite.y = 0.0f;
-    player->sprite.rotation = 0.0f;
-    player->sprite.flipx = false;
-    player->sprite.flipy = false;
-}
 
 static s32 my_reader(void* cb_data, void* dst, s32 len) {
     FILE* f = (FILE*)cb_data;
     return fread(dst, 1, len, f);
 }
 
-static int currentLevelId;
+LevelInfo* currentLevel = NULL;
+
+static lwp_t loadThread;
+static FILE* music;
 
 static f32 camX;
 static f32 camY;
@@ -166,83 +114,12 @@ static const f32 viewScale = 1.5f;
 
 static u64 lastFrameRender = 0;
 
-const char* levelNames[] = {
-    "Stereo Madness",
-    "Back On Track",
-    "Polargeist",
-    "Dry Out",
-    "Base After Base",
-    "Can't Let Go",
-    "Jumper",
-    "Time Machine",
-    "Cycles",
-    "xStep",
-    "Clutterfunk",
-    "Theory of Everything",
-    "Electroman Adventures",
-    "Clubstep",
-    "Electrodynamix",
-    "Hexagon Force",
-    "Blast Processing",
-    "*****",
-    "Geometrical Dominator",
-    "*****",
-    "Fingerdash",
-    "Dash"
-};
-
-static const char* levelMusic[] = {
-    "StereoMadness.mp3",
-    "BackOnTrack.mp3",
-    "Polargeist.mp3",
-    "DryOut.mp3",
-    "BaseAfterBase.mp3",
-    "CantLetGo.mp3",
-    "Jumper.mp3",
-    "TimeMachine.mp3",
-    "Cycles.mp3",
-    "xStep.mp3",
-    "Clutterfunk.mp3",
-    "TheoryOfEverything.mp3",
-    "Electroman.mp3",
-    "Clubstep.mp3",
-    "Electrodynamix.mp3",
-    "HexagonForce.mp3",
-    "BlastProcessing.mp3",
-    "*****",
-    "GeometricalDominator.mp3",
-    "*****",
-    "Fingerdash.mp3",
-    "Dash.mp3"
-};
-
 static int compare(const void* a, const void* b) {
     int first = ((RenderObject*)a)->z_layer - ((RenderObject*)b)->z_layer;
     if (first != 0) {
         return first;
     }
     return ((RenderObject*)a)->z_order - ((RenderObject*)b)->z_order;
-}
-
-bool intersects(const LevelObject* o, const Hitbox* hitbox, const SpriteInfo* player) {
-    if (hitbox->type == HITBOX_TYPE_NONE) {
-        return false;
-    }
-    // SYS_Report("player x: %f, y: %f\n hitbox x: %f, y: %f, width: %f, height %f\n", b->x, b->y, a->x, a->y, a->width, a->height);
-    return !(hitbox->x + o->x + hitbox->width / 2 <= player->x - 15.0 ||
-             hitbox->x + o->x - hitbox->width / 2 >= player->x + 15.0 ||
-             hitbox->y + o->y + hitbox->height / 2 <= player->y - 15.0 ||
-             hitbox->y + o->y - hitbox->height / 2 >= player->y + 15.0);
-}
-
-bool intersectsY(const LevelObject* o, const Hitbox* hitbox, const SpriteInfo* player) {
-    if (hitbox->type == HITBOX_TYPE_NONE) {
-        return false;
-    }
-    // SYS_Report("player x: %f, y: %f\n hitbox x: %f, y: %f, width: %f, height %f\n", b->x, b->y, a->x, a->y, a->width, a->height);
-    return !(
-        hitbox->y + o->y + hitbox->height / 2 <= player->y - 15.0 ||
-        hitbox->y + o->y - hitbox->height / 2 >= player->y + 15.0);
 }
 
 bool intersectsRect(Rect* a, Rect* b) {
@@ -321,31 +198,6 @@ int getCollisionType(const LevelObject* object) {
     }
 }
 
-void hitGround(Player* player, bool reverseGravity) {
-    player->velY = 0.0f;
-
-    player->onGround = true;
-    player->canJump = true;
-
-    // float rotation = player->rotation;
-    // if (rotation != 0.0f) {
-    //     int degrees = (int)rotation;
-    //     if (degrees < 0) {
-    //         degrees %= 360;
-    //     } else {
-    //         degrees = degrees % 360 + 360;
-    //     }
-
-    //     if (!player->gravityFlipped) {
-    //         degrees = roundf((float)degrees / 90) * 90;
-    //     } else {
-    //         degrees = roundf((float)degrees / -90) * -90;
-    //     }
-
-    //     player->rotation = (float)degrees;
-    // }
-}
-
 void flipGravity(Player* player, bool flipped) {
     if (player->gravityFlipped == flipped) {
         return;
@@ -357,105 +209,27 @@ void flipGravity(Player* player, bool flipped) {
     player->velY /= 2.0f;
 }
 
-static void destroyPlayer(Player* player) {
-    player->isDead = true;
-    SYS_Report("Player is dead.\n");
-    levelEnter();
-}
-
-static void propelPlayer(Player* player, float strength) {
-    player->onGround = false;
-    player->velY = player->gravityModifier * strength;
-}
-
-static void ringJump(Player* player) {
-    if (player->touchedRing != NULL && player->queuedHold && player->isHolding) {
-        player->queuedHold = false;
-        player->onGround = false;
-        player->velY = player->jumpVel * player->gravityModifier;
-        player->touchedRing = NULL;
-    }
-}
-
-void collidedWithObject(Player* player, LevelObject* object) {
-    Rect playerRect = {
-        player->x - 15.0f,
-        player->y - 15.0f,
-        30.0f,
-        30.0f
-    };
-
-    Hitbox* hb = &objectDefaults[object->id].hitbox;
-
-    Rect objectRect = {
-        object->x + hb->x - hb->width / 2,
-        object->y + hb->y - hb->height / 2,
-        hb->width,
-        hb->height
-    };
-
-    f32 leeway = 10.0f;
-
-    float halfH = playerRect.height / 2.0f;
-
-    float bottomPlayer = player->y - halfH;
-    float topPlayer = player->y + halfH;
-
-    float objMaxY = objectRect.y + objectRect.height;
-    float objMinY = objectRect.y;
-
-    if (!player->gravityFlipped || player->gameMode == GAMEMODE_SHIP) {
-        if (bottomPlayer >= objMaxY - leeway) {
-            if (player->velY < 0) {
-                player->y = objMaxY + halfH;
-                hitGround(player, player->gravityFlipped && player->gameMode == GAMEMODE_SHIP);
-                return;
-            }
-        }
-    }
-
-    if (player->gravityFlipped || player->gameMode == GAMEMODE_SHIP) {
-        if (topPlayer <= objMinY + leeway) {
-            if (player->velY > 0) {
-                player->y = objMinY - halfH;
-                hitGround(player, !player->gravityFlipped && player->gameMode == GAMEMODE_SHIP);
-                return;
-            }
-        }
-    }
-
-    Rect smallRect = {
-        objectRect.x + objectRect.width / 2.0f - objectRect.width / 2.0f * 0.3f,
-        objectRect.y + objectRect.height / 2.0f - objectRect.height / 2.0f * 0.3f,
-        objectRect.width * 0.3f,
-        objectRect.height * 0.3f
-    };
-    if (intersectsRect(&playerRect, &smallRect)) {
-        destroyPlayer(player);
-    }
-}
-
 void checkCollisions(Player* player, float dt) {
     // Check collision with ground
-    if (player->y < 15 && player->gameMode != GAMEMODE_SHIP) {
+    if (player->y < 15 && player->gamemode != GAMEMODE_SHIP) {
         if (player->gravityFlipped) {
-            destroyPlayer(player);
+            playerDestroy(player);
             return;
         }
         player->y = 15;
-        hitGround(player, false);
+        playerHitGround(player, false);
     } else if (player->y > 1200) {
-        destroyPlayer(player);
+        playerDestroy(player);
         return;
     }
 
-    if (player->gameMode == GAMEMODE_SHIP) {
+    if (player->gamemode == GAMEMODE_SHIP) {
         if (player->y > player->groundTop - 15.0f) {
             player->y = player->groundTop - 15.0f;
-            hitGround(player, !player->gravityFlipped);
+            playerHitGround(player, !player->gravityFlipped);
         } else if (player->y < player->groundBottom + 15.0f) {
             player->y = player->groundBottom + 15.0f;
-            hitGround(player, player->gravityFlipped);
+            playerHitGround(player, player->gravityFlipped);
         }
     }
 
@@ -473,12 +247,8 @@ void checkCollisions(Player* player, float dt) {
         }
     }
 
-    Rect playerRect = {
-        player->x - 15.0f,
-        player->y - 15.0f,
-        30.0f,
-        30.0f
-    };
+    Rect playerRect;
+    playerGetRect(player, &playerRect);
 
     for (int i = 0; i < objectsSize; i++) {
         LevelObject* object = &objects[i];
@@ -520,22 +290,21 @@ void checkCollisions(Player* player, float dt) {
                             flipGravity(player, true);
                             break;
                         case 12:
-                            player->gameMode = GAMEMODE_CUBE;
+                            player->gamemode = GAMEMODE_CUBE;
                             break;
                         case 13:
-                            player->gameMode = GAMEMODE_SHIP;
+                            player->gamemode = GAMEMODE_SHIP;
                             break;
                     }
                     break;
                 case PAD:
-                    propelPlayer(player, 16.0f);
+                    playerPadJump(player, 16.0f);
                     break;
                 case ORB:
-                    player->touchedRing = object;
-                    ringJump(player);
+                    playerRingJump(player, 1);
                     break;
                 default:
-                    collidedWithObject(player, object);
+                    playerCollideWithObject(player, object, &objectDefaults[object->id]);
                     break;
             }
         }
@@ -554,44 +323,85 @@ void checkCollisions(Player* player, float dt) {
         };
 
         if (intersectsRect(&playerRect, &hazardRect)) {
-            destroyPlayer(player);
+            playerDestroy(player);
         }
     }
     // Clear hazards list
 }
 
-int loadLevel(int levelId) {
-    currentLevelId = levelId;
+void* loadThreadHandler(void* data) {
+    LevelInfo* levelInfo = (LevelInfo*)data;
 
     u64 start = gettime();
 
     char levelPath[64];
-    snprintf(levelPath, 64, ASSETS_PATH "levels/%d.txt", levelId + 1);
+    snprintf(levelPath, 64, ASSETS_PATH "levels/%d.txt", levelInfo->id);
 
     char* levelString = GDL_GetLevelString(levelPath);
     if (levelString == NULL) {
-        return 0;
+        currentLevel = NULL;
+        return NULL;
     }
 
     objects = GDL_ParseLevelString(levelString, &objectsSize, objectDefaults);
     if (!objects) {
-        return 0;
+        currentLevel = NULL;
+        return NULL;
     }
 
     free(levelString);
 
+    char buf[64];
+    snprintf(buf, 64, ASSETS_PATH "music/%s", levelInfo->music);
+    music = fopen(buf, "rb");
+
     SYS_Report("Level loaded: %d objects. (%f ms)\n", objectsSize, ticks_to_microsecs(gettime() - start) / 1000.0f);
+
+    currentLevel = levelInfo;
+    return (void*)1;
+}
+
+int loadLevel(int levelId) {
+    LevelInfo* levelInfo = getLevelInfoById(levelId);
+
+    if (levelInfo == NULL) {
+        return 0;
+    }
+
+    if (LWP_CreateThread(&loadThread, loadThreadHandler, levelInfo, NULL, 0, 0) != 0) {
+        SYS_Report("Could not create load level thread...\n");
+    }
 
     return 1;
 }
 
-static void levelEnter() {
+void levelRestart() {
     lastX = 0.0f;
 
     camX = 0.0f;
     camY = cameraVerticalBounds_2;
 
-    Player_init(&player);
+    playerInit(&player);
+
+    colorInit();
+
+    MP3Player_Stop();
+    fseek(music, 0, SEEK_SET);
+    MP3Player_PlayFile(music, my_reader, NULL);
+}
+
+static void levelEnter() {
+    void* loadThreadRet;
+    if (LWP_JoinThread(loadThread, &loadThreadRet) != 0 && (size_t)loadThreadRet == 0) {
+        SYS_Report("Level loading failed!!!\n");
+    }
+
+    lastX = 0.0f;
+
+    camX = 0.0f;
+    camY = cameraVerticalBounds_2;
+
+    playerInit(&player);
 
     colorInit();
 
@@ -603,17 +413,12 @@ static void levelEnter() {
     SYS_Report("Render cache created with size %d and capacity %d, p = %p\n", renderCache.size, renderCache.capacity, renderCache.objects);
 
     MP3Player_Stop();
-
-    {
-        char buf[64];
-        snprintf(buf, 64, ASSETS_PATH "music/%s", levelMusic[currentLevelId]);
-        FILE* file = fopen(buf, "rb");
-        MP3Player_PlayFile(file, my_reader, NULL);
-    }
+    MP3Player_PlayFile(music, my_reader, NULL);
 }
 
 static void levelExit() {
     MP3Player_Stop();
+    fclose(music);
 
     free(objects);
     objectsSize = 0;
@@ -640,7 +445,7 @@ static void updateCamera(Player* player) {
     float candidatePosition = camY;
     float easeValue = 10.0f;
 
-    switch (player->gameMode) {
+    switch (player->gamemode) {
         case GAMEMODE_CUBE:
         default:
             if (player->y + upperBound > screenTop) {
@@ -666,111 +471,6 @@ static void updateCamera(Player* player) {
 static void updateVisibility() {
 }
 
-static bool isFalling(Player* player) {
-    // if (player->gravityFlipped) {
-    //     return player->velY > 0.0f;
-    // } else {
-    //     return player->velY < 0.0f;
-    // }
-    if (player->gravityFlipped) {
-        return player->velY > player->gravity + player->gravity;
-    } else {
-        return player->velY < player->gravity + player->gravity;
-    }
-}
-
-// Update Y velocity if necessary
-static void updateJump(Player* player, f32 dt) {
-    switch (player->gameMode) {
-        case GAMEMODE_CUBE:
-            if (player->isHolding && player->canJump) {
-                player->isRising = true;
-                player->onGround = false;
-                player->canJump = false;
-                player->queuedHold = false;
-
-                player->velY = player->jumpVel * player->gravityModifier;
-            } else {
-                if (!player->isRising) {
-                    player->canJump = false;
-
-                    player->velY -= player->gravity * dt * player->gravityModifier;
-
-                    // terminal velocity
-                    if (player->gravityFlipped) {
-                        if (player->velY > 15.0f) {
-                            player->velY = 15.0f;
-                        }
-                    } else {
-                        if (player->velY < -15.0f) {
-                            player->velY = -15.0f;
-                        }
-                    }
-
-                    if (isFalling(player)) {
-                        if (player->gravityFlipped && player->velY > 4.0f) {
-                            player->onGround = false;
-                        } else if (!player->gravityFlipped && player->velY < -4.0f) {
-                            player->onGround = false;
-                        }
-                    }
-                } else {
-                    player->velY -= player->gravity * dt * player->gravityModifier;
-
-                    if (isFalling(player)) {
-                        player->isRising = false;
-                        player->onGround = false;
-                    }
-                }
-            }
-            break;
-        case GAMEMODE_SHIP: {
-            float shipAccel;
-            if (!player->isHolding && !isFalling(player)) {
-                shipAccel = 1.2f;
-            } else if (player->isHolding) {
-                shipAccel = -1.0f;
-            } else {
-                shipAccel = 0.8f;
-            }
-
-            float extraBoost = (player->isHolding && isFalling(player)) ? 0.5f : 0.4f;
-
-            player->velY -= dt * player->gravity * player->gravityModifier * extraBoost * shipAccel;
-
-            if (player->gravityFlipped) {
-                if (player->velY < -8.0f) {
-                    player->velY = -8.0f;
-                }
-                if (player->velY > 0.8f * 8.0f) {
-                    player->velY = 0.8f * 8.0f;
-                }
-            } else {
-                if (player->velY < 0.8f * -8.0f) {
-                    player->velY = 0.8f * -8.0f;
-                }
-                if (player->velY > 8.0f) {
-                    player->velY = 8.0f;
-                }
-            }
-            if (player->isHolding) {
-                player->onGround = false;
-            }
-        } break;
-        default:
-            break;
-    }
-}
-
-static void updatePlayer(Player* player, f32 dt) {
-    f32 slow_dt = dt * 0.9f;
-    updateJump(player, slow_dt);
-
-    // Integrate position
-    player->x += player->velX * slow_dt;
-    player->y += player->velY * slow_dt;
-}
-
 static void update(f32 dt) {
     lastX = player.x;
 
@@ -781,7 +481,7 @@ static void update(f32 dt) {
 
     f32 step = deltaFrames / 4.0f;
     for (int i = 0; i < 4; i++) {
-        updatePlayer(&player, step);
+        playerUpdate(&player, step);
         checkCollisions(&player, step);
     }
 
@@ -794,201 +494,43 @@ static void levelRun(f32 deltaTime) {
 
     u32 pressed = WPAD_ButtonsDown(0);
     if (pressed & WPAD_BUTTON_A) {
-        player.isHolding = true;
+        player.holding = true;
         player.queuedHold = true;
     }
 
     u32 released = WPAD_ButtonsUp(0);
     if (released & WPAD_BUTTON_A) {
-        player.isHolding = false;
+        player.holding = false;
         player.queuedHold = false;
     }
 
     update(deltaTime);
 
-    // switch (gameMode) {
-    //     case GAMEMODE_CUBE:
-
-    //         break;
-    //     case GAMEMODE_SHIP:
-    //         const f32 shipGravity = -0.9582 * 30.0f;
-
-    //         if (held & WPAD_BUTTON_A) {
-    //             velY -= shipGravity * gravityModifier * deltaTime;
-    //         } else {
-    //             velY += shipGravity * gravityModifier * deltaTime;
-    //         }
-
-    //         // terminal velocity
-    //         if (velY * gravityModifier < -1.0f * defaultSpeed) {
-    //             velY = -1.0f * gravityModifier * defaultSpeed;
-    //         } else if (velY * gravityModifier > 1.0f * defaultSpeed) {
-    //             velY = 1.0f * gravityModifier * defaultSpeed;
-    //         }
-
-    //         break;
-    // }
-
     if (pressed & WPAD_BUTTON_B) {
         changeState(&GAMESTATE_MENU, .5);
     }
 
-    // player.x += velX * deltaFrames;
-
-    // // Check Hazard collisions
-    // for (int i = 0; i < objectsSize; i++) {
-    //     LevelObject* object = &objects[i];
-
-    //     Hitbox* objectHitbox = &objectDefaults[object->id].hitbox;
-    //     if (intersects(object, objectHitbox, &player)) {
-    //         if (getCollisionType(object) == HAZARD) {
-    //             SYS_Report("ded\n");
-    //             // TODO kill player
-    //         }
-    //     }
-    // }
-
-    // // Check X collisions
-    // for (int i = 0; i < objectsSize; i++) {
-    //     LevelObject* object = &objects[i];
-
-    //     Hitbox* objectHitbox = &objectDefaults[object->id].hitbox;
-    //     if (intersects(object, objectHitbox, &player)) {
-    //         // SYS_Report("there was a collision (x)!\n");  // crash the game
-    //         float overlapX = fmin(object->x + objectHitbox->x + objectHitbox->width / 2, player.x + 15.0) - fmax(player.x - 15, object->x + objectHitbox->x - objectHitbox->width / 2);
-
-    //         if (player.x < object->x + objectHitbox->x) {
-    //             SYS_Report("ded\n");
-    //             // player.x -= overlapX;  // move left
-    //         }
-    //     }
-    // }
-
-    // // player.y += velY * deltaFrames;
-
-    if (!player.onGround) {
-        switch (player.gameMode) {
-            case GAMEMODE_CUBE:
+    switch (player.gamemode) {
+        case GAMEMODE_CUBE:
+            if (!player.grounded) {
                 player.rotation += (5.0f / 23.0f) * defaultSpeed * 180.0f * deltaTime * player.gravityModifier;
-                break;
+            } else {
+                player.rotation = fmodf(player.rotation, 360.0f);
+                if (player.rotation < 0.0f) {
+                    player.rotation += 360.0f;
+                }
 
-            case GAMEMODE_SHIP:
-                player.rotation = -atan2(player.velY, player.velX) * (180.0f / M_PI);
-                break;
-        }
-    } else {
-        player.rotation = fmodf(player.rotation, 360.0f);
-        if (player.rotation < 0.0f) {
-            player.rotation += 360.0f;
-        }
+                float targetRotation = roundf(player.rotation / 90.0f) * 90.0f;
 
-        float targetRotation = roundf(player.rotation / 90.0f) * 90.0f;
-
-        player.rotation += (targetRotation - player.rotation) / 3.0f;
+                player.rotation += (targetRotation - player.rotation) / 3.0f;
+            }
+            break;
+        case GAMEMODE_SHIP:
+            player.rotation = -atan2(player.velY, player.velX) * (180.0f / M_PI);
+            break;
     }
 
-    // grounded = false;
-
-    // // Check Y collisions
-    // for (int i = 0; i < objectsSize; i++) {
-    //     LevelObject* object = &objects[i];
-
-    //     Hitbox* objectHitbox = &objectDefaults[object->id].hitbox;
-    //     if (intersects(object, objectHitbox, &player)) {
-    //         // SYS_Report("there was a collision (y)!\n");  // crash the game
-
-    //         float overlapY = fmin(object->y + objectHitbox->y + objectHitbox->height / 2, player.y + 15.0) - fmax(player.y - 15, object->y + objectHitbox->y - objectHitbox->height / 2);
-    //         if (getCollisionType(object) == SOLID) {
-    //             if (player.y > object->y + objectHitbox->y && gravityModifier > 0.0f) {
-    //                 player.y += overlapY;  // move up
-    //                 velY = 0;
-    //                 player.rotation = roundf(player.rotation / 90.0f) * 90.0f;
-    //                 grounded = true;
-    //             } else if (player.y < object->y + objectHitbox->y && gravityModifier < 0.0f) {
-    //                 player.y -= overlapY;  // move down
-    //                 velY = 0;
-    //                 player.rotation = roundf(player.rotation / 90.0f) * -90.0f;
-    //                 grounded = true;
-    //             } else {
-    //                 SYS_Report("ded\n");
-    //             }
-    //         }
-    //     }
-    // }
-
-    // if (player.y < 15) {
-    //     velY = 0;
-    //     player.y = 15;
-    //     player.rotation = roundf(player.rotation / 90.0f) * 90.0f;
-    //     grounded = true;
-    // }
-
-    // // Check Pad collisions
-    // for (int i = 0; i < objectsSize; i++) {
-    //     LevelObject* object = &objects[i];
-
-    //     Hitbox* objectHitbox = &objectDefaults[object->id].hitbox;
-
-    //     if (intersects(object, objectHitbox, &player)) {
-    //         switch (getCollisionType(object)) {
-    //             case PAD:
-    //                 switch (object->id) {
-    //                     case 35:
-    //                         velY = velYellowPad * gravityModifier * defaultSpeed;
-    //                         break;
-    //                     case 67:
-    //                         velY = velBluePad * gravityModifier * defaultSpeed;
-    //                         gravityModifier *= -1.0f;
-    //                         break;
-    //                 }
-    //                 break;
-    //             case PORTAL:
-    //                 switch (object->id) {
-    //                     case 10:
-    //                         gravityModifier = 1.0f;
-    //                         break;
-    //                     case 11:
-    //                         gravityModifier = -1.0f;
-    //                         break;
-    //                     case 12:
-    //                         gameMode = GAMEMODE_CUBE;
-    //                         break;
-    //                     case 13:
-    //                         gameMode = GAMEMODE_SHIP;
-    //                         break;
-    //                 }
-    //                 break;
-    //             case ORB:
-    //                 // if (WPAD_ButtonsDown(0) & WPAD_BUTTON_A || bufferedInput) {
-    //                 //     if (bufferedInput) {
-    //                 //         bufferedInput = false;
-    //                 //     }
-    //                 //     switch (object->id) {
-    //                 //         case 36:
-    //                 //             velY = velYellowOrb * gravityModifier * defaultSpeed;
-    //                 //             break;
-    //                 //         case 84:
-    //                 //             velY = velBlueOrb * gravityModifier * defaultSpeed;
-    //                 //             gravityModifier *= -1.0f;
-    //                 //             break;
-    //                 //     }
-    //                 // }
-    //                 break;
-    //         }
-    //     }
-    // }
-
     camX = player.x + 2.5f * 30.0f;
-
-    player.sprite.x = player.x;
-    player.sprite.y = player.y;
-    player.sprite.rotation = player.rotation;
-
-    // if (player.y < camY - cameraVerticalBounds_2) {
-    //     camY = player.y + cameraVerticalBounds_2;
-    // } else if (player.y > camY + cameraVerticalBounds_2) {
-    //     camY = player.y - cameraVerticalBounds_2;
-    // }
 
     f32 viewBoundsL = camX - (view_width / 2.0f) / viewScale;
     f32 viewBoundsR = camX + (view_width / 2.0f) / viewScale;
@@ -1255,15 +797,24 @@ static void levelRender() {
 
         RDR_drawSpriteFromMap(object->tex, (SpriteInfo){ object->x, object->y, object->rotation, object->flipx, object->flipy }, object->colorChannel, view);
     }
-    switch (player.gameMode) {
+
+    SpriteInfo playerSprite = {
+        .x = player.x,
+        .y = player.y,
+        .rotation = player.rotation,
+        .flipx = false,
+        .flipy = player.gamemode == GAMEMODE_SHIP && player.gravityFlipped
+    };
+
+    switch (player.gamemode) {
         case GAMEMODE_CUBE:
-            RDR_drawSpriteFromMap(ht_search("player_01_001.png"), player.sprite, 1011, view);
-            RDR_drawSpriteFromMap(ht_search("player_01_2_001.png"), player.sprite, 1012, view);
+            RDR_drawSpriteFromMap(ht_search("player_01_001.png"), playerSprite, 1011, view);
+            RDR_drawSpriteFromMap(ht_search("player_01_2_001.png"), playerSprite, 1012, view);
             break;
 
         case GAMEMODE_SHIP:
-            RDR_drawSpriteFromMap(ht_search("ship_01_001.png"), player.sprite, 1011, view);
-            RDR_drawSpriteFromMap(ht_search("ship_01_2_001.png"), player.sprite, 1012, view);
+            RDR_drawSpriteFromMap(ht_search("ship_01_001.png"), playerSprite, 1011, view);
+            RDR_drawSpriteFromMap(ht_search("ship_01_2_001.png"), playerSprite, 1012, view);
             break;
     }
 
@@ -1296,7 +847,7 @@ static void levelRender() {
     guMtxTrans(model, -(view_width / 2.0f) + 10.0f, view_height / 2.0f - 10.0f, 0.0f);
     char buf[100];
 
-    snprintf(buf, 100, "Current level: %s (%d)", levelNames[currentLevelId], currentLevelId + 1);
+    snprintf(buf, 100, "Current level: %s (%d)", currentLevel->name, currentLevel->id);
     f32 offset = Font_RenderText(&font, &fontTexture, buf, 20.0f, ALIGN_LEFT, 600.0f, model);
 
     snprintf(buf, 100, "pos: %.3f, %.3f", player.x, player.y);

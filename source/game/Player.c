@@ -1,5 +1,10 @@
 #include "Player.h"
 
+#include "gamelevel.h"
+
+bool intersectsRect(Rect* a, Rect* b);
+void playerDestroy(Player* player);
+
 Player* playerInit(Player* player) {
     player->x = 0.0f;
     player->y = 0.0f;
@@ -19,6 +24,7 @@ Player* playerInit(Player* player) {
     player->holding = false;
     player->queuedHold = false;
     player->dead = false;
+    player->gamemode = GAMEMODE_CUBE;
     return player;
 }
 
@@ -35,6 +41,12 @@ void playerHitGround(Player* player, bool reverseGravity) {
 
     player->grounded = true;
     player->canJump = true;
+}
+
+void playerDestroy(Player* player) {
+    player->dead = true;
+    SYS_Report("Player is dead.\n");
+    levelRestart();
 }
 
 void playerChangeGamemode(Player* player, Gamemode gamemode) {
@@ -57,8 +69,8 @@ void playerChangeGamemode(Player* player, Gamemode gamemode) {
     }
 }
 
-void playerPadJump(Player* player, float strength) {
-    player->velY = strength * player->gravityModifier;
+void playerPadJump(Player* player, float velocity) {
+    player->velY = velocity * player->gravityModifier;
     player->grounded = false;
 }
 
@@ -66,12 +78,12 @@ void playerRingJump(Player* player, float strength) {
     if (player->queuedHold) {
         player->queuedHold = false;
 
-        player->velY = strength * player->gravityModifier;
+        player->velY = player->jumpVel * strength * player->gravityModifier;
         player->grounded = false;
     }
 }
 
-static void playerGetRect(Player* player, Rect* rect) {
+void playerGetRect(Player* player, Rect* rect) {
     rect->x = player->x - 15.0f;
     rect->y = player->y - 15.0f;
     rect->width = 30.0f;
@@ -86,7 +98,7 @@ void playerCollideWithObject(Player* player, LevelObject* object, ObjectData* cl
 
     Rect objectRect = {
         object->x + hb->x - hb->width / 2.0f,
-        object->y + hb->y - hb->width / 2.0f,
+        object->y + hb->y - hb->height / 2.0f,
         hb->width,
         hb->height
     };
@@ -102,8 +114,9 @@ void playerCollideWithObject(Player* player, LevelObject* object, ObjectData* cl
     float objectTop = objectRect.y + objectRect.height;
 
     if (!player->gravityFlipped || player->gamemode == GAMEMODE_SHIP) {
+        // SYS_Report("pb:%f, hh: %f, ot: %f\n", playerBottom, halfH, objectTop);
         if (playerBottom >= objectTop - tolerance) {
-            if (player->velY <= 0) {
+            if (player->velY < 0) {
                 player->y = objectTop + halfH;
                 playerHitGround(player, player->gravityFlipped && player->gamemode == GAMEMODE_SHIP);
                 return;
@@ -113,12 +126,22 @@ void playerCollideWithObject(Player* player, LevelObject* object, ObjectData* cl
 
     if (player->gravityFlipped || player->gamemode == GAMEMODE_SHIP) {
         if (playerTop <= objectBottom + tolerance) {
-            if (player->velY >= 0) {
+            if (player->velY > 0) {
                 player->y = objectBottom - halfH;
                 playerHitGround(player, player->gravityFlipped && player->gamemode == GAMEMODE_SHIP);
                 return;
             }
         }
+    }
+
+    Rect smallRect = {
+        objectRect.x + objectRect.width / 2.0f - objectRect.width / 2.0f * 0.3f,
+        objectRect.y + objectRect.height / 2.0f - objectRect.height / 2.0f * 0.3f,
+        objectRect.width * 0.3f,
+        objectRect.height * 0.3f
+    };
+    if (intersectsRect(&playerRect, &smallRect)) {
+        playerDestroy(player);
     }
 }
 
