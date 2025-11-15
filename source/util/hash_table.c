@@ -231,7 +231,7 @@ void openPlist(const char* files[], int arrSize) {
     }
 
     int bytes = table->size * (sizeof(ht_item) + sizeof(ht_item*)) + getStringSize();
-    float percent = (float)bytes / (64 * 1024 * 1024);
+    float percent = (float)bytes / (24 * 1024 * 1024);
 
-    SYS_Report("Sprite sheet hash table size: %d items (about %d bytes, %.2f%% of main memory)\n", table->size, bytes, 100 * percent);
+    SYS_Report("Sprite sheet hash table size: %d items (about %d bytes, %.2f%% of MEM1)\n", table->size, bytes, 100 * percent);
 }

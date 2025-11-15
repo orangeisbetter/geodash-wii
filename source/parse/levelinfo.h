@@ -2,16 +2,11 @@
 
 typedef struct {
     int id;
-    const char* name;
-    const char* music;
+    char* name;
+    char* music;
 } LevelInfo;
 
-typedef struct {
-    LevelInfo* levels;
-    int numLevels;
-} LevelsInfo;
+int levelsInit(const char* filepath);
+void levelsFree();
 
-extern LevelsInfo levelsInfo;
-extern int mainLevels[8];
-
-LevelInfo* getLevelInfoById(int id);
+const LevelInfo* levelStoreSearch(int id);

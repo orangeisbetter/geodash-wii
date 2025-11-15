@@ -76,7 +76,6 @@ static void transition() {
     currentState = nextState;
     if (currentState && currentState->enter)
         currentState->enter();
-    SYS_Report("State changed to %p\n", currentState);
 }
 
 static void drawFade() {

@@ -1,5 +1,6 @@
 [ ] fix canJump flag usage
 [ ] cube rotation
+[ ] level settings (default colors, etc)
 [ ] fading color triggers
 [ ] Horizontal portals should not halve velocity (for some reason that's how it works, idk)
 [ ] particles and streaks

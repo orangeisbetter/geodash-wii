@@ -76,7 +76,7 @@ static s32 my_reader(void* cb_data, void* dst, s32 len) {
     return fread(dst, 1, len, f);
 }
 
-LevelInfo* currentLevel = NULL;
+const static LevelInfo* currentLevel = NULL;
 
 static lwp_t loadThread;
 static FILE* music;
@@ -330,12 +330,10 @@ void checkCollisions(Player* player, float dt) {
 }
 
 void* loadThreadHandler(void* data) {
-    LevelInfo* levelInfo = (LevelInfo*)data;
-
     u64 start = gettime();
 
     char levelPath[64];
-    snprintf(levelPath, 64, ASSETS_PATH "levels/%d.txt", levelInfo->id);
+    snprintf(levelPath, 64, ASSETS_PATH "levels/%d.txt", currentLevel->id);
 
     char* levelString = GDL_GetLevelString(levelPath);
     if (levelString == NULL) {
@@ -352,23 +350,21 @@ void* loadThreadHandler(void* data) {
     free(levelString);
 
     char buf[64];
-    snprintf(buf, 64, ASSETS_PATH "music/%s", levelInfo->music);
+    snprintf(buf, 64, ASSETS_PATH "music/%s", currentLevel->music);
     music = fopen(buf, "rb");
 
     SYS_Report("Level loaded: %d objects. (%f ms)\n", objectsSize, ticks_to_microsecs(gettime() - start) / 1000.0f);
 
-    currentLevel = levelInfo;
     return (void*)1;
 }
 
 int loadLevel(int levelId) {
-    LevelInfo* levelInfo = getLevelInfoById(levelId);
-
-    if (levelInfo == NULL) {
+    currentLevel = levelStoreSearch(levelId);
+    if (!currentLevel) {
         return 0;
     }
 
-    if (LWP_CreateThread(&loadThread, loadThreadHandler, levelInfo, NULL, 0, 0) != 0) {
+    if (LWP_CreateThread(&loadThread, loadThreadHandler, NULL, NULL, 0, 0) != 0) {
         SYS_Report("Could not create load level thread...\n");
     }
 

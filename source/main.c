@@ -24,6 +24,8 @@
 #include "game/gamelevel.h"
 #include "game/homescreen.h"
 #include "game/screenManager.h"
+#include "parse/levelinfo.h"
+#include "parse/mappack.h"
 
 s8 HWButton = -1;
 
@@ -91,7 +93,7 @@ int main(int argc, char** argv) {
 
     TPLFile backgroundTPL;
     if (TPL_OpenTPLFromFile(&backgroundTPL, ASSETS_PATH "background.tpl") != 1) {
-        exit(0);
+        exit(EXIT_FAILURE);
     }
 
     TPL_GetTexture(&backgroundTPL, 0, &backgroundTexture);
@@ -125,8 +127,40 @@ int main(int argc, char** argv) {
     SYS_Report("Loaded sprite sheets. (%f ms)\n", ticks_to_microsecs(gettime() - start) / 1000.0f);
 
     // -----------------------------------------------------------------
+    // Load levels info
+    // -----------------------------------------------------------------
+
+    SYS_Report("Loading levels store...\n");
+
+    start = gettime();
+
+    if (!levelsInit(ASSETS_PATH "level-info.xml")) {
+        SYS_Report("Failed to load level info\n");
+        exit(EXIT_FAILURE);
+    }
+
+    SYS_Report("Loaded levels store. (%f ms)\n", ticks_to_microsecs(gettime() - start) / 1000.0f);
+
+    // -----------------------------------------------------------------
+    // Load mappacks
+    // -----------------------------------------------------------------
+
+    SYS_Report("Loading mappacks...\n");
+
+    start = gettime();
+
+    if (!mappacksLoad(ASSETS_PATH "mappacks")) {
+        SYS_Report("Failed to load mappacks.\n");
+        exit(EXIT_FAILURE);
+    }
+
+    SYS_Report("Loaded mappacks. (%f ms)\n", ticks_to_microsecs(gettime() - start) / 1000.0f);
+
+    // -----------------------------------------------------------------
     // Open objects file
     // -----------------------------------------------------------------
+
+    SYS_Report("Loading object definitions...\n");
 
     start = gettime();
 
@@ -138,11 +172,13 @@ int main(int argc, char** argv) {
     // Load textures
     // -----------------------------------------------------------------
 
+    SYS_Report("Loading textures...\n");
+
     start = gettime();
 
     TPLFile groundTPL;
     if (TPL_OpenTPLFromFile(&groundTPL, ASSETS_PATH "ground.tpl") != 1) {
-        exit(0);
+        exit(EXIT_FAILURE);
     }
 
     TPL_GetTexture(&groundTPL, 0, &groundTexture);

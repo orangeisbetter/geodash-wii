@@ -9,7 +9,8 @@
                 "${DEVKITPRO}/libogc/include/ogc",
                 "${DEVKITPRO}/portlibs/ppc/include",
                 "${DEVKITPRO}/portlibs/wii/include",
-                "${DEVKITPPC}/powerpc-eabi/include"
+                "${DEVKITPPC}/powerpc-eabi/include",
+                "${DEVKITPPC}/lib/gcc/powerpc-eabi/15.1.0/include"
             ],
             "defines": [
                 "_DEBUG",
