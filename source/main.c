@@ -70,8 +70,8 @@ int main(int argc, char** argv) {
     fatInitDefault();
 
     // Callbacks for poweroff
-    // SYS_SetPowerCallback(wiiPowerPressed);
-    // WPAD_SetPowerButtonCallback(wiimotePowerPressed);
+    SYS_SetPowerCallback(wiiPowerPressed);
+    WPAD_SetPowerButtonCallback(wiimotePowerPressed);
 
     Mtx view;
     Mtx model;
@@ -199,7 +199,8 @@ int main(int argc, char** argv) {
             exit(0);
         }
 
-        runState(1.0f / 60.0f);
+        float dt = 1.0f / (float)refresh_rate;
+        runState(dt);
 
         GX_DrawDone();
 

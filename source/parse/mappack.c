@@ -16,11 +16,6 @@ static MapPack* mappacks = NULL;
 static int size = 0;
 static int capacity = 0;
 
-static int isXML(const char* name) {
-    const char* dot = strrchr(name, '.');
-    return dot && strcasecmp(dot, ".xml") == 0;
-}
-
 static int mappackLoad(const char* filename, MapPack* mappack) {
     FILE* file = fopen(filename, "r");
     if (!file) {
@@ -36,14 +31,22 @@ static int mappackLoad(const char* filename, MapPack* mappack) {
     struct xml_node* root = xml_document_root(document);
     mappack->numLevels = xml_node_children(root);
 
+    // mappack name
     struct xml_string* str = xml_node_attribute_content(root, 0);
     int len = xml_string_length(str);
-    mappack->name = malloc(sizeof(char) * (len + 1));
-    xml_string_copy(str, (uint8_t*)mappack->name, len);
-    mappack->name[len] = '\0';
+    char* name = malloc(sizeof(char) * (len + 1));
+    if (!name) {
+        return 0;
+    }
+    xml_string_copy(str, (uint8_t*)name, len);
+    name[len] = '\0';
 
-    mappack->ids = malloc(sizeof(*mappack->ids) * mappack->numLevels);
-    if (!mappack->ids) {
+    mappack->name = name;
+
+    // level ids
+    int* ids = malloc(sizeof(*ids) * mappack->numLevels);
+    if (!ids) {
+        free(name);
         return 0;
     }
 
@@ -55,12 +58,15 @@ static int mappackLoad(const char* filename, MapPack* mappack) {
         len = xml_string_length(str);
         xml_string_copy(str, (uint8_t*)buf, 9);
         buf[len < 10 ? len : 9] = '\0';
-        mappack->ids[i] = atoi(buf);
-        if (mappack->ids[i] == 0) {
-            free(mappack->ids);
+        ids[i] = atoi(buf);
+        if (ids[i] == 0) {
+            free(name);
+            free(ids);
             return 0;
         }
     }
+
+    mappack->ids = ids;
 
     SYS_Report("Loaded mappack \"%s\": %d levels\n", mappack->name, mappack->numLevels);
 
@@ -79,7 +85,8 @@ int mappacksLoad(const char* dirpath) {
         if (entry->d_type == DT_DIR) {
             continue;
         }
-        if (!isXML(entry->d_name)) {
+        const char* dot = strrchr(entry->d_name, '.');
+        if (!dot || strcasecmp(dot, ".xml")) {
             continue;
         }
 
@@ -127,7 +134,8 @@ int mappacksLoad(const char* dirpath) {
 
 void mappacksFree() {
     for (int i = 0; i < size; i++) {
-        free(mappacks->ids);
+        free((char*)mappacks[i].name);
+        free((int*)mappacks[i].ids);
     }
     free(mappacks);
     size = 0;

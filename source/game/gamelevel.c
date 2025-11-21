@@ -85,6 +85,7 @@ static f32 camX;
 static f32 camY;
 
 static f32 lastX;
+static bool screenFlipped = false;
 
 static const f32 defaultSpeed = 10.386f;                           // Units: blocks per second
 static const f32 gravity = -0.876f * defaultSpeed * defaultSpeed;  // Units: blocks per second squared
@@ -209,6 +210,10 @@ void flipGravity(Player* player, bool flipped) {
     player->velY /= 2.0f;
 }
 
+void flipScreen(bool state) {
+    screenFlipped = state;
+}
+
 void checkCollisions(Player* player, float dt) {
     // Check collision with ground
     if (player->y < 15 && player->gamemode != GAMEMODE_SHIP) {
@@ -294,6 +299,12 @@ void checkCollisions(Player* player, float dt) {
                             break;
                         case 13:
                             player->gamemode = GAMEMODE_SHIP;
+                            break;
+                        case 45:
+                            flipScreen(true);
+                            break;
+                        case 46:
+                            flipScreen(false);
                             break;
                     }
                     break;
@@ -790,7 +801,9 @@ static void levelRender() {
             f32 factor = (object->x - fadeBoundsR) / dist;
             object->y -= factor * 90.0f;
         }
-
+        if (screenFlipped) {
+            object->x = 2 * camX - object->x;
+        }
         RDR_drawSpriteFromMap(object->tex, (SpriteInfo){ object->x, object->y, object->rotation, object->flipx, object->flipy }, object->colorChannel, view);
     }
 
@@ -827,7 +840,9 @@ static void levelRender() {
             f32 factor = (object->x - fadeBoundsR) / dist;
             object->y -= factor * 90.0f;
         }
-
+        if (screenFlipped) {
+            object->x = 2 * camX - object->x;
+        }
         RDR_drawSpriteFromMap(object->tex, (SpriteInfo){ object->x, object->y, object->rotation, object->flipx, object->flipy }, object->colorChannel, view);
     }
 

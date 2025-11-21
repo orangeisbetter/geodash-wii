@@ -7,3 +7,6 @@
 [ ] proper death handling (play death sound, freeze for a few frames, then restart)
 [X] asynchronous level loading (use multithreading)
 [ ] sectioning of level for rendering and physics optimization and expedition
+[ ] audio engine
+[ ] Mirror portals
+[ ] sprite transform order (rotate, flip)

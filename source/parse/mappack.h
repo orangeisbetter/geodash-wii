@@ -1,8 +1,8 @@
 #pragma once
 
 typedef struct {
-    char* name;
-    int* ids;
+    const char* name;
+    const int* ids;
     int numLevels;
 } MapPack;
 

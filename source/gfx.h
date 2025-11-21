@@ -8,10 +8,13 @@ typedef enum {
     BLEND_STENCIL,
 } GFX_BlendMode;
 
+extern GXRModeObj* rmode;
+
 extern u16 view_width;
 extern u16 view_height;
 extern f32 aspect_ratio;
 extern bool widescreen;
+extern u8 refresh_rate;
 
 void GFX_InitVideo();
 void GFX_Init();

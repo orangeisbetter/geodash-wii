@@ -11,7 +11,7 @@
 
 static void* frameBuffer[2];
 static u32 fb = 0;
-static GXRModeObj* rmode;
+GXRModeObj* rmode;
 
 static float px_width, px_height;
 static u8* gp_fifo;
@@ -20,6 +20,7 @@ u16 view_width;
 u16 view_height;
 f32 aspect_ratio;
 bool widescreen = false;
+u8 refresh_rate;
 
 static Mtx44 ortho;
 
@@ -72,6 +73,12 @@ void GFX_InitVideo() {
 
     if (rmode->viTVMode & VI_NON_INTERLACE) {
         VIDEO_WaitVSync();
+    }
+
+    if (((rmode->viTVMode >> 2) & 0x7) == VI_PAL) {
+        refresh_rate = 50;
+    } else {
+        refresh_rate = 60;
     }
 
     gp_fifo = memalign(32, DEFAULT_FIFO_SIZE);
