@@ -1,5 +1,6 @@
 build/
 boot.dol
 boot.elf
+assets
 assets/
 textures/*.png
