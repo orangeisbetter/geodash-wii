@@ -10,13 +10,14 @@
                 "${DEVKITPRO}/portlibs/ppc/include",
                 "${DEVKITPRO}/portlibs/wii/include",
                 "${DEVKITPPC}/powerpc-eabi/include",
-                "${DEVKITPPC}/lib/gcc/powerpc-eabi/15.1.0/include"
+                "${DEVKITPPC}/lib/gcc/powerpc-eabi/*/include"
             ],
             "defines": [
                 "_DEBUG",
                 "UNICODE",
                 "_UNICODE",
-                "HW_RVL"
+                "HW_RVL",
+                "GEKKO"
             ],
             "compilerPath": "${DEVKITPRO}/devkitPPC/bin/powerpc-eabi-gcc",
             "cStandard": "c17",

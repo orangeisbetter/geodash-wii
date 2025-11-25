@@ -244,20 +244,20 @@ void RDR_drawLine(Mtx view, f32 camY, f32 viewScale) {
     GX_End();
 }
 
-void RDR_drawSpriteFromMap(texture_info* tex, SpriteInfo sprite, int colorChannel, Mtx view) {
+void RDR_drawSpriteFromMap(texture_info* tex, SpriteInfo* sprite, int colorChannel, Mtx view) {
     Color color = getColorChannel(colorChannel);
     RDR_drawSpriteFromMap2(tex, sprite, color.color, color.blending, view);
 }
 
-void RDR_drawSpriteFromMap2(texture_info* tex, SpriteInfo sprite, u32 color, bool blending, Mtx view) {
+void RDR_drawSpriteFromMap2(texture_info* tex, SpriteInfo* sprite, u32 color, bool blending, Mtx view) {
     if (blending) {
         GX_SetBlendMode(GX_BM_BLEND, GX_BL_SRCALPHA, GX_BL_ONE, GX_LO_NOOP);
     } else {
         GX_SetBlendMode(GX_BM_BLEND, GX_BL_SRCALPHA, GX_BL_INVSRCALPHA, GX_LO_NOOP);
     }
 
-    f32 dx = sprite.x;
-    f32 dy = sprite.y;
+    f32 dx = sprite->x;
+    f32 dy = sprite->y;
     f32 dw = tex->spriteSize.x;
     f32 dh = tex->spriteSize.y;
 
@@ -275,11 +275,11 @@ void RDR_drawSpriteFromMap2(texture_info* tex, SpriteInfo sprite, u32 color, boo
     f32 halfW = dw / 2;
     f32 halfH = dh / 2;
 
-    if (sprite.flipx) {
+    if (sprite->flipx) {
         halfW *= -1;
         offsetx *= -1;
     }
-    if (sprite.flipy) {
+    if (sprite->flipy) {
         halfH *= -1;
         offsety *= -1;
     }
@@ -287,7 +287,7 @@ void RDR_drawSpriteFromMap2(texture_info* tex, SpriteInfo sprite, u32 color, boo
     static guVector forward = { 0.0f, 0.0f, -1.0f };
 
     Mtx model, modelView;
-    guMtxRotAxisDeg(model, &forward, sprite.rotation);
+    guMtxRotAxisDeg(model, &forward, sprite->rotation);
     guMtxApplyTrans(model, model, tex->spriteOffset.x, tex->spriteOffset.y, 0.0f);
     guMtxTransApply(model, model, dx, dy, 0.0f);
     guMtxConcat(view, model, modelView);
@@ -307,6 +307,69 @@ void RDR_drawSpriteFromMap2(texture_info* tex, SpriteInfo sprite, u32 color, boo
         GFX_Plot(+halfW, +halfH, 0.0f, u1, v0, color);
         GFX_Plot(+halfW, -halfH, 0.0f, u1, v1, color);
         GFX_Plot(-halfW, -halfH, 0.0f, u0, v1, color);
+    }
+
+    GX_End();
+}
+
+void RDR_drawRenderObject(RenderObject* object, bool flipped, Mtx view) {
+    if (object->color.blending) {
+        GX_SetBlendMode(GX_BM_BLEND, GX_BL_SRCALPHA, GX_BL_ONE, GX_LO_NOOP);
+    } else {
+        GX_SetBlendMode(GX_BM_BLEND, GX_BL_SRCALPHA, GX_BL_INVSRCALPHA, GX_LO_NOOP);
+    }
+
+    f32 dx = object->x;
+    f32 dy = object->y;
+    f32 dw = object->tex->spriteSize.x;
+    f32 dh = object->tex->spriteSize.y;
+
+    f32 offsetx = object->tex->spriteOffset.x;
+    f32 offsety = object->tex->spriteOffset.y;
+
+    f32 sizex = object->tex->textureRotated ? object->tex->textureRect.size.y : object->tex->textureRect.size.x;
+    f32 sizey = object->tex->textureRotated ? object->tex->textureRect.size.x : object->tex->textureRect.size.y;
+
+    f32 u0 = object->tex->textureRect.pos.x / (f32)RDR_getTexSize(object->tex->sheetIdx).width;
+    f32 u1 = u0 + sizex / (f32)RDR_getTexSize(object->tex->sheetIdx).width;
+    f32 v0 = object->tex->textureRect.pos.y / (f32)RDR_getTexSize(object->tex->sheetIdx).height;
+    f32 v1 = v0 + sizey / (f32)RDR_getTexSize(object->tex->sheetIdx).height;
+
+    f32 halfW = dw / 2;
+    f32 halfH = dh / 2;
+
+    if (object->flipx) {
+        halfW *= -1;
+        offsetx *= -1;
+    }
+    if (object->flipy) {
+        halfH *= -1;
+        offsety *= -1;
+    }
+
+    static guVector forward = { 0.0f, 0.0f, -1.0f };
+
+    Mtx model, modelView;
+    guMtxRotAxisDeg(model, &forward, object->rotation);
+    guMtxApplyTrans(model, model, object->tex->spriteOffset.x, object->tex->spriteOffset.y, 0.0f);
+    guMtxTransApply(model, model, dx, dy, 0.0f);
+    guMtxConcat(view, model, modelView);
+    GX_LoadPosMtxImm(modelView, GX_PNMTX0);
+
+    GFX_BindTexture(object->tex->sheetIdx);
+
+    GX_Begin(GX_QUADS, GX_VTXFMT0, 4);
+
+    if (object->tex->textureRotated) {
+        GFX_Plot(-halfW, +halfH, 0.0f, u1, v0, object->color.color);
+        GFX_Plot(+halfW, +halfH, 0.0f, u1, v1, object->color.color);
+        GFX_Plot(+halfW, -halfH, 0.0f, u0, v1, object->color.color);
+        GFX_Plot(-halfW, -halfH, 0.0f, u0, v0, object->color.color);
+    } else {
+        GFX_Plot(-halfW, +halfH, 0.0f, u0, v0, object->color.color);
+        GFX_Plot(+halfW, +halfH, 0.0f, u1, v0, object->color.color);
+        GFX_Plot(+halfW, -halfH, 0.0f, u1, v1, object->color.color);
+        GFX_Plot(-halfW, -halfH, 0.0f, u0, v1, object->color.color);
     }
 
     GX_End();

@@ -152,13 +152,31 @@ static void menuRender() {
     texture_info* corner = ht_search("GJ_sideArt_001.png");
     f32 cornerXPos = ((view_width / 2) / viewScale) - (corner->spriteSize.x / 2);
     f32 cornerYPos = ((view_height / 2) / viewScale) - (corner->spriteSize.y / 2);
-    RDR_drawSpriteFromMap(corner, (SpriteInfo){ -cornerXPos, -cornerYPos, 0, false, false }, 1003, view);
-    RDR_drawSpriteFromMap(corner, (SpriteInfo){ cornerXPos, -cornerYPos, 0, true, false }, 1003, view);
+    RenderObject object = {
+        .tex = corner,
+        .x = -cornerXPos,
+        .y = -cornerYPos,
+        .rotation = 0.0f,
+        .color = { 0xffffffff, false },
+        .flipx = false,
+        .flipy = false,
+    };
+    RDR_drawRenderObject(&object, false, view);
+    object.x = cornerXPos;
+    object.flipx = true;
+    RDR_drawRenderObject(&object, false, view);
+    // RDR_drawSpriteFromMap(corner, (SpriteInfo){ -cornerXPos, -cornerYPos, 0, false, false }, 1003, view);
+    // RDR_drawSpriteFromMap(corner, (SpriteInfo){ cornerXPos, -cornerYPos, 0, true, false }, 1003, view);
 
     // top bar
     texture_info* topBar = ht_search("GJ_topBar_001.png");
     f32 topBarYPos = ((view_height / 2) / viewScale) - (topBar->spriteSize.y / 2);
-    RDR_drawSpriteFromMap(topBar, (SpriteInfo){ 0, topBarYPos, 0, false, false }, 1003, view);
+    object.tex = topBar;
+    object.flipx = false;
+    object.x = 0;
+    object.y = topBarYPos;
+    RDR_drawRenderObject(&object, false, view);
+    // RDR_drawSpriteFromMap(topBar, (SpriteInfo){ 0, topBarYPos, 0, false, false }, 1003, view);
 
     if (!mainLevels) {
         Mtx model, modelView;
@@ -170,28 +188,44 @@ static void menuRender() {
 
     // back arrow
     texture_info* backArrow = ht_search("GJ_arrow_01_001.png");
+    object.tex = backArrow;
     f32 backButtonXPos = ((view_width / 2) / viewScale) - (backArrow->spriteSize.x / 2) - 10;
     f32 backButtonYPos = ((view_height / 2) / viewScale) - (backArrow->spriteSize.y / 2) - 5;
-    RDR_drawSpriteFromMap(backArrow, (SpriteInfo){ -backButtonXPos, backButtonYPos, 0, false, false }, 1003, view);
+    object.x = -backButtonXPos;
+    object.y = backButtonYPos;
+    RDR_drawRenderObject(&object, false, view);
+    // RDR_drawSpriteFromMap(backArrow, (SpriteInfo){ -backButtonXPos, backButtonYPos, 0, false, false }, 1003, view);
 
     // arrows
     texture_info* arrow = ht_search("navArrowBtn_001.png");
+    object.tex = arrow;
     f32 arrowXPos = ((view_width / 2) / viewScale) - (arrow->spriteSize.x / 2) - 10;
     f32 arrowYPos = 0;
-    RDR_drawSpriteFromMap(arrow, (SpriteInfo){ -arrowXPos, arrowYPos, 0, true, false }, 1003, view);
-    RDR_drawSpriteFromMap(arrow, (SpriteInfo){ arrowXPos, arrowYPos, 0, false, false }, 1003, view);
+    object.x = -arrowXPos;
+    object.y = arrowYPos;
+    object.flipx = true;
+    RDR_drawRenderObject(&object, false, view);
+    object.x = arrowXPos;
+    object.flipx = false;
+    RDR_drawRenderObject(&object, false, view);
+    // RDR_drawSpriteFromMap(arrow, (SpriteInfo){ -arrowXPos, arrowYPos, 0, true, false }, 1003, view);
+    // RDR_drawSpriteFromMap(arrow, (SpriteInfo){ arrowXPos, arrowYPos, 0, false, false }, 1003, view);
 
     // circle
     const int circleSpacing = 20;
     texture_info* circle = ht_search("d_link_b_01_color_001.png");
+    object.tex = circle;
     f32 circleXPos = ((mainLevels->numLevels) * circleSpacing) / 2.0f;
     f32 circleYPos = ((view_height / 2) / viewScale) - (circle->spriteSize.y / 2) - 16;
+    object.y = -circleYPos;
     for (int i = 0; i < mainLevels->numLevels + 1; i++) {
-        u32 color = 0x7f7f7fff;
+        object.color.color = 0x7f7f7fff;
         if (i == levelIndex) {
-            color = 0xffffffff;
+            object.color.color = 0xffffffff;
         }
-        RDR_drawSpriteFromMap2(circle, (SpriteInfo){ -circleXPos + (circleSpacing * i), -circleYPos, 0, false, false }, color, false, view);
+        object.x = -circleXPos + (circleSpacing * i);
+        RDR_drawRenderObject(&object, false, view);
+        // RDR_drawSpriteFromMap2(circle, (SpriteInfo){ -circleXPos + (circleSpacing * i), -circleYPos, 0, false, false }, color, false, view);
     }
 
     if (levelInfo != NULL) {

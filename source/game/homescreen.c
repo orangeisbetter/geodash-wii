@@ -91,7 +91,11 @@ static void renderHomeScreen() {
     guMtxIdentity(view);
     guMtxScaleApply(view, view, viewScale, viewScale, 1.0f);
 
-    RDR_drawSpriteFromMap(tex, (SpriteInfo){ 0, 0, 0, false, false }, 1003, view);
+    SpriteInfo playButton = {
+        0, 0, 0, false, false
+    };
+
+    RDR_drawSpriteFromMap(tex, &playButton, 1003, view);
 
     // Draw line (VERY IMPORTANT)
     RDR_drawLine(view, camY, viewScale);

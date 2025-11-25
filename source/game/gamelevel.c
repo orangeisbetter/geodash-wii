@@ -87,9 +87,6 @@ static f32 camY;
 static f32 lastX;
 static bool screenFlipped = false;
 
-static const f32 defaultSpeed = 10.386f;                           // Units: blocks per second
-static const f32 gravity = -0.876f * defaultSpeed * defaultSpeed;  // Units: blocks per second squared
-
 static const f32 velCubeJump = 1.94f;
 static const f32 velYellowPad = 2.77f;
 // static const f32 velPinkPad = 1.79f;
@@ -179,23 +176,23 @@ int getCollisionType(const LevelObject* object) {
         case 95:
         case 96:
             return SOLID;
-        case 35:  // yellow
-        case 67:  // blue
+        case 35: // yellow
+        case 67: // blue
             return PAD;
-        case 10:  // blue
-        case 11:  // yellow
-        case 12:  // cube
-        case 13:  // ship
+        case 10: // blue
+        case 11: // yellow
+        case 12: // cube
+        case 13: // ship
         case 45:
         case 46:
         case 47:
         case 99:
             return PORTAL;
-        case 36:  // yellow
-        case 84:  // blue
+        case 36: // yellow
+        case 84: // blue
             return ORB;
         default:
-            return NONE;  // no collision
+            return NONE; // no collision
     }
 }
 
@@ -388,6 +385,8 @@ void levelRestart() {
     camX = 0.0f;
     camY = cameraVerticalBounds_2;
 
+    screenFlipped = false;
+
     playerInit(&player);
 
     colorInit();
@@ -407,6 +406,8 @@ static void levelEnter() {
 
     camX = 0.0f;
     camY = cameraVerticalBounds_2;
+
+    screenFlipped = false;
 
     playerInit(&player);
 
@@ -475,9 +476,6 @@ static void updateCamera(Player* player) {
     camY += (candidatePosition - camY) / easeValue;
 }
 
-static void updateVisibility() {
-}
-
 static void update(f32 dt) {
     lastX = player.x;
 
@@ -520,7 +518,7 @@ static void levelRun(f32 deltaTime) {
     switch (player.gamemode) {
         case GAMEMODE_CUBE:
             if (!player.grounded) {
-                player.rotation += (5.0f / 23.0f) * defaultSpeed * 180.0f * deltaTime * player.gravityModifier;
+                player.rotation += (5.0f / 23.0f) * 10.386f * 180.0f * deltaTime * player.gravityModifier;
             } else {
                 player.rotation = fmodf(player.rotation, 360.0f);
                 if (player.rotation < 0.0f) {
@@ -653,15 +651,20 @@ static void levelRender() {
         if (!renderObject) {
             SYS_Report(__FILE__ ": Cannot create render object!!!\n");
         }
+
+        renderObject->transform[0][2] = object->x;
+        renderObject->transform[1][2] = object->y;
+
+        renderObject->tex = tex;
+        renderObject->z_layer = object->z_layer;
+        renderObject->z_order = object->z_order;
+        renderObject->z = 0;
+
         renderObject->x = object->x;
         renderObject->y = object->y;
         renderObject->rotation = object->rotation;
         renderObject->flipx = object->flipx;
         renderObject->flipy = object->flipy;
-        renderObject->z_layer = object->z_layer;
-        renderObject->z_order = object->z_order;
-        renderObject->z = 0;
-        renderObject->tex = tex;
 
         int baseColorChannel = object->base_color_channel;
         int detailColorChannel = object->detail_color_channel;
@@ -672,12 +675,16 @@ static void levelRender() {
             detailColorChannel = tmp;
         }
 
-        if (objectData->color_type == COLOR_TYPE_BASE) {
-            renderObject->colorChannel = baseColorChannel;
-        } else if (objectData->color_type == COLOR_TYPE_DETAIL) {
-            renderObject->colorChannel = detailColorChannel;
-        } else {
-            renderObject->colorChannel = 1010;
+        switch (objectData->color_type) {
+            case COLOR_TYPE_BASE:
+                renderObject->color = getColorChannel(baseColorChannel);
+                break;
+            case COLOR_TYPE_DETAIL:
+                renderObject->color = getColorChannel(detailColorChannel);
+                break;
+            case COLOR_TYPE_BLACK:
+                renderObject->color.color = 0x000000ff;
+                renderObject->color.blending = false;
         }
 
         // portals
@@ -704,19 +711,23 @@ static void levelRender() {
             renderObject->z = 0;
             renderObject->tex = tex;
 
-            if (objectData->color_type == COLOR_TYPE_BASE) {
-                renderObject->colorChannel = baseColorChannel;
-            } else if (objectData->color_type == COLOR_TYPE_DETAIL) {
-                renderObject->colorChannel = detailColorChannel;
-            } else {
-                renderObject->colorChannel = 1010;
+            switch (objectData->color_type) {
+                case COLOR_TYPE_BASE:
+                    renderObject->color = getColorChannel(baseColorChannel);
+                    break;
+                case COLOR_TYPE_DETAIL:
+                    renderObject->color = getColorChannel(detailColorChannel);
+                    break;
+                case COLOR_TYPE_BLACK:
+                    renderObject->color.color = 0x000000ff;
+                    renderObject->color.blending = false;
             }
         }
 
         // children part
         ObjectDataChild* children = objectData->children;
 
-        for (int i = 0; i < objectDefaults[object->id].numChildren; i++) {
+        for (int i = 0; i < objectData->numChildren; i++) {
             ObjectDataChild* child = &children[i];
             texture_info* tex = ht_search(child->texture);
             if (tex == NULL) {
@@ -742,12 +753,16 @@ static void levelRender() {
             int baseColorChannel = object->base_color_channel;
             int detailColorChannel = object->detail_color_channel;
 
-            if (child->color_type == COLOR_TYPE_BASE) {
-                renderObject->colorChannel = baseColorChannel;
-            } else if (child->color_type == COLOR_TYPE_DETAIL) {
-                renderObject->colorChannel = detailColorChannel;
-            } else {
-                renderObject->colorChannel = 1010;
+            switch (child->color_type) {
+                case COLOR_TYPE_BASE:
+                    renderObject->color = getColorChannel(baseColorChannel);
+                    break;
+                case COLOR_TYPE_DETAIL:
+                    renderObject->color = getColorChannel(detailColorChannel);
+                    break;
+                case COLOR_TYPE_BLACK:
+                    renderObject->color.color = 0x000000ff;
+                    renderObject->color.blending = false;
             }
         }
     }
@@ -766,8 +781,8 @@ static void levelRender() {
     guMtxIdentity(view);
 
     // Background and ground are special, they don't use the camera view matrix. IT'S ALL AN ILLUSION
-    RDR_drawBackground(&backgroundTexture, camX, camY, 0.49f, getColorChannel(1000).color);
-    RDR_drawGround(&groundTexture, camX, camY, viewScale, getColorChannel(1001).color);
+    RDR_drawBackground(&backgroundTexture, screenFlipped ? -camX : camX, camY, 0.49f, getColorChannel(1000).color);
+    RDR_drawGround(&groundTexture, screenFlipped ? -camX : camX, camY, viewScale, getColorChannel(1001).color);
 
     // Set up camera view matrix
     guMtxTrans(view, -camX, -camY, -10.0f);
@@ -794,36 +809,43 @@ static void levelRender() {
         if (object->x < fadeBoundsL) {
             f32 dist = fadeBoundsL - viewBoundsL;
             f32 factor = (fadeBoundsL - object->x) / dist;
+            object->color.color = object->color.color & 0xffffff00 | (u32)((object->color.color & 0xff) * (1.0f - factor));
             object->y -= factor * 90.0f;
         }
         if (object->x > fadeBoundsR) {
             f32 dist = viewBoundsR - fadeBoundsR;
             f32 factor = (object->x - fadeBoundsR) / dist;
+            object->color.color = object->color.color & 0xffffff00 | (u32)((object->color.color & 0xff) * (1.0f - factor));
             object->y -= factor * 90.0f;
         }
         if (screenFlipped) {
             object->x = 2 * camX - object->x;
         }
-        RDR_drawSpriteFromMap(object->tex, (SpriteInfo){ object->x, object->y, object->rotation, object->flipx, object->flipy }, object->colorChannel, view);
+        // RDR_drawSpriteFromMap(object->tex, (SpriteInfo){ object->x, object->y, object->rotation, object->color && 0xff, object->flipx, object->flipy }, object->colorChannel, view);
+        RDR_drawRenderObject(object, screenFlipped, view);
     }
 
     SpriteInfo playerSprite = {
         .x = player.x,
         .y = player.y,
         .rotation = player.rotation,
-        .flipx = false,
+        .flipx = screenFlipped,
         .flipy = player.gamemode == GAMEMODE_SHIP && player.gravityFlipped
     };
 
+    if (screenFlipped) {
+        playerSprite.x = 2 * camX - playerSprite.x;
+    }
+
     switch (player.gamemode) {
         case GAMEMODE_CUBE:
-            RDR_drawSpriteFromMap(ht_search("player_01_001.png"), playerSprite, 1011, view);
-            RDR_drawSpriteFromMap(ht_search("player_01_2_001.png"), playerSprite, 1012, view);
+            RDR_drawSpriteFromMap(ht_search("player_01_001.png"), &playerSprite, 1011, view);
+            RDR_drawSpriteFromMap(ht_search("player_01_2_001.png"), &playerSprite, 1012, view);
             break;
 
         case GAMEMODE_SHIP:
-            RDR_drawSpriteFromMap(ht_search("ship_01_001.png"), playerSprite, 1011, view);
-            RDR_drawSpriteFromMap(ht_search("ship_01_2_001.png"), playerSprite, 1012, view);
+            RDR_drawSpriteFromMap(ht_search("ship_01_001.png"), &playerSprite, 1011, view);
+            RDR_drawSpriteFromMap(ht_search("ship_01_2_001.png"), &playerSprite, 1012, view);
             break;
     }
 
@@ -833,17 +855,20 @@ static void levelRender() {
         if (object->x < fadeBoundsL) {
             f32 dist = fadeBoundsL - viewBoundsL;
             f32 factor = (fadeBoundsL - object->x) / dist;
+            object->color.color = object->color.color & 0xffffff00 | (u32)((object->color.color & 0xff) * (1.0f - factor));
             object->y -= factor * 90.0f;
         }
         if (object->x > fadeBoundsR) {
             f32 dist = viewBoundsR - fadeBoundsR;
             f32 factor = (object->x - fadeBoundsR) / dist;
+            object->color.color = object->color.color & 0xffffff00 | (u32)((object->color.color & 0xff) * (1.0f - factor));
             object->y -= factor * 90.0f;
         }
         if (screenFlipped) {
             object->x = 2 * camX - object->x;
         }
-        RDR_drawSpriteFromMap(object->tex, (SpriteInfo){ object->x, object->y, object->rotation, object->flipx, object->flipy }, object->colorChannel, view);
+        // RDR_drawSpriteFromMap(object->tex, (SpriteInfo){ object->x, object->y, object->rotation, object->flipx, object->flipy }, object->colorChannel, view);
+        RDR_drawRenderObject(object, screenFlipped, view);
     }
 
     // Draw line (VERY IMPORTANT)
