@@ -476,6 +476,9 @@ static void updateCamera(Player* player) {
     camY += (candidatePosition - camY) / easeValue;
 }
 
+static void updateVisibility() {
+}
+
 static void update(f32 dt) {
     lastX = player.x;
 
