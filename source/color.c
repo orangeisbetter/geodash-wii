@@ -23,10 +23,12 @@ void colorInit() {
     colors[1004].color = 0xffffffff;
     colors[1004].blending = false;
 
-    colors[1005].color = 0xfbceffff;
+    // colors[1005].color = 0xfbceffff;
+    colors[1005].color = 0x00ff00ff;
     colors[1005].blending = true;
 
-    colors[1006].color = 0x7630fdff;
+    // colors[1006].color = 0x7630fdff;
+    colors[1006].color = 0x00ffffff;
     colors[1006].blending = true;
 
     colors[1007].color = 0xffff00ff;

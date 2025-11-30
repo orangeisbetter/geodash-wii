@@ -7,6 +7,7 @@
 #include "gfx.h"
 #include "color.h"
 #include "util/hash_table.h"
+#include "util/sort.h"
 
 GXTexObj backgroundTexture;
 GXTexObj groundTexture;
@@ -312,7 +313,11 @@ void RDR_drawSpriteFromMap2(texture_info* tex, SpriteInfo* sprite, u32 color, bo
     GX_End();
 }
 
-void RDR_drawRenderObject(RenderObject* object, bool flipped, Mtx view) {
+void RDR_drawRenderObject(RenderObject* object, bool flipped, const Mtx view) {
+    if (!object->tex) {
+        return;
+    }
+
     if (object->color.blending) {
         GX_SetBlendMode(GX_BM_BLEND, GX_BL_SRCALPHA, GX_BL_ONE, GX_LO_NOOP);
     } else {
@@ -338,23 +343,32 @@ void RDR_drawRenderObject(RenderObject* object, bool flipped, Mtx view) {
     f32 halfW = dw / 2;
     f32 halfH = dh / 2;
 
-    if (object->flipx) {
-        halfW *= -1;
-        offsetx *= -1;
-    }
-    if (object->flipy) {
-        halfH *= -1;
-        offsety *= -1;
-    }
+    Mtx model;
+    Mtx modelView;
 
-    static guVector forward = { 0.0f, 0.0f, -1.0f };
+    if (!object->usemtx) {
+        if (object->flipx) {
+            halfW *= -1;
+            offsetx *= -1;
+        }
+        if (object->flipy) {
+            halfH *= -1;
+            offsety *= -1;
+        }
 
-    Mtx model, modelView;
-    guMtxRotAxisDeg(model, &forward, object->rotation);
-    guMtxApplyTrans(model, model, object->tex->spriteOffset.x, object->tex->spriteOffset.y, 0.0f);
-    guMtxTransApply(model, model, dx, dy, 0.0f);
-    guMtxConcat(view, model, modelView);
-    GX_LoadPosMtxImm(modelView, GX_PNMTX0);
+        static guVector forward = { 0.0f, 0.0f, -1.0f };
+
+        guMtxRotAxisDeg(model, &forward, object->rotation);
+        guMtxApplyTrans(model, model, object->tex->spriteOffset.x, object->tex->spriteOffset.y, 0.0f);
+        guMtxTransApply(model, model, dx, dy, 0.0f);
+        guMtxConcat(view, model, modelView);
+        GX_LoadPosMtxImm(modelView, GX_PNMTX0);
+    } else {
+        guMtxTrans(model, object->tex->spriteOffset.x, object->tex->spriteOffset.y, 0.0f);
+        guMtxConcat(object->transform, model, model);
+        guMtxConcat(view, model, modelView);
+        GX_LoadPosMtxImm(modelView, GX_PNMTX0);
+    }
 
     GFX_BindTexture(object->tex->sheetIdx);
 
@@ -373,6 +387,135 @@ void RDR_drawRenderObject(RenderObject* object, bool flipped, Mtx view) {
     }
 
     GX_End();
+}
+
+static int compareSprite(const void* a, const void* b) {
+    return ((RenderObject*)a)->z - ((RenderObject*)b)->z;
+}
+
+void RDR_drawLevelObject(const LevelObject* object, const ObjectData* objectClass, bool flipped, u8 alpha, const Mtx pre, const Mtx view) {
+    static RenderObject* sprites = NULL;
+    static int capacity = 10;
+
+    if (sprites == NULL) {
+        sprites = malloc(sizeof(RenderObject) * capacity);
+    }
+    if (!sprites) {
+        SYS_Report(__FILE__ ":%d: Could not allocate memory!\n", __LINE__);
+        return;
+    }
+    int size = objectClass->numChildren + 1;
+    if (capacity < size) {
+        if (capacity * 2 >= size) {
+            capacity *= 2;
+        } else {
+            capacity = size;
+        }
+        sprites = realloc(sprites, sizeof(RenderObject) * capacity);
+    }
+    if (!sprites) {
+        SYS_Report(__FILE__ ":%d: Could not reallocate memory!\n", __LINE__);
+        return;
+    }
+
+    RenderObject* parent = &sprites[0];
+
+    parent->tex = ht_search(objectClass->texture);
+    parent->z = 0;
+    parent->usemtx = true;
+
+    {
+        int baseColorChannel = object->base_color_channel;
+        int detailColorChannel = object->detail_color_channel;
+
+        if (objectClass->swap_base_detail) {
+            int tmp = baseColorChannel;
+            baseColorChannel = detailColorChannel;
+            detailColorChannel = tmp;
+        }
+
+        switch (objectClass->color_type) {
+            case COLOR_TYPE_BASE:
+                parent->color = getColorChannel(baseColorChannel);
+                break;
+            case COLOR_TYPE_DETAIL:
+                parent->color = getColorChannel(detailColorChannel);
+                break;
+            case COLOR_TYPE_BLACK:
+                parent->color.color = 0x000000ff;
+                parent->color.blending = false;
+                break;
+        }
+
+        parent->color.color = (parent->color.color & 0xffffff00) | ((parent->color.color & 0xff) * alpha) >> 8;
+    }
+
+    static guVector front = { 0.0f, 0.0f, -1.0f };
+
+    // Flip
+    guMtxScale(parent->transform, object->flipx ? -1.0f : 1.0f, object->flipy ? -1.0f : 1.0f, 1.0f);
+    // Rotate
+    Mtx temp;
+    guMtxRotAxisDeg(temp, &front, object->rotation);
+    guMtxConcat(temp, parent->transform, parent->transform);
+    // Flip again if necessary
+    if (flipped) {
+        guMtxScaleApply(parent->transform, parent->transform, -1.0f, 1.0f, 1.0f);
+    }
+    // "Model" matrix
+    guMtxConcat(pre, parent->transform, parent->transform);
+    // Translate
+    guMtxTransApply(parent->transform, parent->transform, object->x, object->y, 0.0f);
+
+    for (int i = 0; i < objectClass->numChildren; i++) {
+        ObjectDataChild* child = &objectClass->children[i];
+
+        RenderObject* sprite = &sprites[i + 1];
+
+        sprite->tex = ht_search(child->texture);
+        sprite->z = child->z;
+        sprite->usemtx = true;
+
+        {
+            int baseColorChannel = object->base_color_channel;
+            int detailColorChannel = object->detail_color_channel;
+
+            if (objectClass->swap_base_detail) {
+                int tmp = baseColorChannel;
+                baseColorChannel = detailColorChannel;
+                detailColorChannel = tmp;
+            }
+
+            switch (child->color_type) {
+                case COLOR_TYPE_BASE:
+                    sprite->color = getColorChannel(baseColorChannel);
+                    break;
+                case COLOR_TYPE_DETAIL:
+                    sprite->color = getColorChannel(detailColorChannel);
+                    break;
+                case COLOR_TYPE_BLACK:
+                    sprite->color.color = 0x000000ff;
+                    sprite->color.blending = false;
+                    break;
+            }
+        }
+
+        // Flip
+        guMtxScale(sprite->transform, child->flip_x ? -1.0f : 1.0f, child->flip_y ? -1.0f : 1.0f, 1.0f);
+        // Rotate
+        Mtx temp;
+        guMtxRotAxisDeg(temp, &front, child->rot);
+        guMtxConcat(temp, sprite->transform, sprite->transform);
+        // Translate
+        guMtxTransApply(sprite->transform, sprite->transform, child->x, child->y, 0.0f);
+        guMtxConcat(parent->transform, sprite->transform, sprite->transform);
+    }
+
+    merge_sort(sprites, size, sizeof(RenderObject), compareSprite);
+
+    for (int i = 0; i < size; i++) {
+        RDR_drawRenderObject(&sprites[i], false, view);
+    }
 }
 
 void RDR_drawRect(GXTexObj* tex, f32 x, f32 y, f32 w, f32 h, u32 color) {
@@ -459,39 +602,4 @@ void RDR_drawRect(GXTexObj* tex, f32 x, f32 y, f32 w, f32 h, u32 color) {
     GFX_Plot(-w2 + width / 2 + x, -h2 + height / 2 + y, 0.0f, 0.25f, 0.75f, color);
 
     GX_End();
-}
-
-int RDR_RenderCacheInit(RenderCache* renderCache, int initialCapacity) {
-    renderCache->size = 0;
-    renderCache->objects = malloc(sizeof(RenderObject) * initialCapacity);
-    if (renderCache->objects == NULL) {
-        return 0;
-    }
-    renderCache->capacity = initialCapacity;
-    return 1;
-}
-
-RenderObject* RDR_RenderCacheAdd(RenderCache* renderCache) {
-    if (renderCache->size == renderCache->capacity) {
-        renderCache->capacity *= 2;
-        SYS_Report("Resizing object cache size to %d objects\n", renderCache->capacity);
-        RenderObject* newObjects = realloc(renderCache->objects, sizeof(RenderObject) * renderCache->capacity);
-        if (newObjects == NULL) {
-            SYS_Report("Out of memory, render cache cannot be resized\n");
-            return NULL;
-        }
-        renderCache->objects = newObjects;
-    }
-    return renderCache->objects + (renderCache->size++);
-}
-
-void RDR_RenderCacheClear(RenderCache* renderCache) {
-    renderCache->size = 0;
-}
-
-void RDR_RenderCacheFree(RenderCache* renderCache) {
-    renderCache->size = 0;
-    renderCache->capacity = 0;
-    free(renderCache->objects);
-    renderCache->objects = NULL;
 }

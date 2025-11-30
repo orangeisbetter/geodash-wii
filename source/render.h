@@ -16,13 +16,14 @@ typedef struct {
     f32 x;
     f32 y;
     f32 rotation;
-    f32 transform[2][3];
+    Mtx transform;
     // f32 scaleX;
     // f32 scaleY;
     s32 z_order;
     u8 z_layer;
     s32 z;
     Color color;
+    bool usemtx;
     bool flipx;
     bool flipy;
 } RenderObject;
@@ -65,11 +66,6 @@ void RDR_drawMenuBackground(f32 x, f32 y, f32 scale, u32 topColor, u32 bottomCol
 
 void RDR_drawSpriteFromMap(texture_info* tex, SpriteInfo* sprite, int colorChannel, Mtx view);
 void RDR_drawSpriteFromMap2(texture_info* tex, SpriteInfo* sprite, u32 color, bool blending, Mtx view);
-void RDR_drawRenderObject(RenderObject* object, bool flipped, Mtx view);
-// void RDR_drawLevelObject(LevelObject* object, Mtx view);
+void RDR_drawRenderObject(RenderObject* object, bool flipped, const Mtx view);
+void RDR_drawLevelObject(const LevelObject* object, const ObjectData* objectClass, bool flipped, u8 alpha, const Mtx model, const Mtx view);
 void RDR_drawRect(GXTexObj* tex, f32 x, f32 y, f32 w, f32 h, u32 color);
-
-int RDR_RenderCacheInit(RenderCache* renderCache, int initialCapacity);
-RenderObject* RDR_RenderCacheAdd(RenderCache* renderCache);
-void RDR_RenderCacheClear(RenderCache* renderCache);
-void RDR_RenderCacheFree(RenderCache* renderCache);

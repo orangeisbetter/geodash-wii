@@ -108,16 +108,26 @@ static int objectsSize;
 
 static RenderCache renderCache = { 0 };
 
+static struct {
+    const LevelObject** objects;
+    int size;
+    int capacity;
+} sortBuffer = {
+    NULL,
+    0,
+    0
+};
+
 static const f32 viewScale = 1.5f;
 
 static u64 lastFrameRender = 0;
 
 static int compare(const void* a, const void* b) {
-    int first = ((RenderObject*)a)->z_layer - ((RenderObject*)b)->z_layer;
+    int first = (*(LevelObject**)a)->z_layer - (*(LevelObject**)b)->z_layer;
     if (first != 0) {
         return first;
     }
-    return ((RenderObject*)a)->z_order - ((RenderObject*)b)->z_order;
+    return (*(LevelObject**)a)->z_order - (*(LevelObject**)b)->z_order;
 }
 
 bool intersectsRect(Rect* a, Rect* b) {
@@ -304,6 +314,7 @@ void checkCollisions(Player* player, float dt) {
                             flipScreen(false);
                             break;
                     }
+                    player->canJump = false;
                     break;
                 case PAD:
                     playerPadJump(player, 16.0f);
@@ -413,12 +424,12 @@ static void levelEnter() {
 
     colorInit();
 
-    if (!RDR_RenderCacheInit(&renderCache, 256)) {
-        SYS_Report("Unable to allocate memory for object cache\n");
+    sortBuffer.capacity = 256;
+    sortBuffer.objects = malloc(sizeof(*sortBuffer.objects) * sortBuffer.capacity);
+    if (!sortBuffer.objects) {
+        SYS_Report("Unable to allocate memory for sort buffer!\n");
         exit(EXIT_FAILURE);
     }
-
-    SYS_Report("Render cache created with size %d and capacity %d, p = %p\n", renderCache.size, renderCache.capacity, renderCache.objects);
 
     MP3Player_Stop();
     MP3Player_PlayFile(music, my_reader, NULL);
@@ -431,7 +442,10 @@ static void levelExit() {
     free(objects);
     objectsSize = 0;
 
-    RDR_RenderCacheClear(&renderCache);
+    free(sortBuffer.objects);
+    sortBuffer.objects = NULL;
+    sortBuffer.capacity = 0;
+    sortBuffer.size = 0;
 }
 
 static void updateCamera(Player* player) {
@@ -611,8 +625,8 @@ static void levelRender() {
     f32 fadeBoundsL = viewBoundsL + 90.0f;
     f32 fadeBoundsR = viewBoundsR - 90.0f;
 
-    // Build render cache
-    RDR_RenderCacheClear(&renderCache);
+    // Clear buffer
+    sortBuffer.size = 0;
 
     for (int i = 0; i < objectsSize; i++) {
         LevelObject* object = &objects[i];
@@ -638,58 +652,19 @@ static void levelRender() {
             continue;
         }
 
-        // then do the things that show up in the render cache
-        ObjectData* objectData = &objectDefaults[object->id];
-        if (!objectData->exists || objectData->texture == NULL) {
-            continue;
+        // Expand buffer if necessary
+        if (sortBuffer.size == sortBuffer.capacity) {
+            sortBuffer.capacity *= 2;
+            sortBuffer.objects = realloc(sortBuffer.objects, sizeof(*sortBuffer.objects) * sortBuffer.capacity);
+            if (!sortBuffer.objects) {
+                SYS_Report("Unable to resize sort buffer!\n");
+                return;
+            }
         }
 
-        texture_info* tex = ht_search(objectData->texture);
-        if (tex == NULL) {
-            // SYS_Report("Can't find texture %d\n", object->id);
-            continue;
-        }
+        sortBuffer.objects[sortBuffer.size++] = object;
 
-        RenderObject* renderObject = RDR_RenderCacheAdd(&renderCache);
-        if (!renderObject) {
-            SYS_Report(__FILE__ ": Cannot create render object!!!\n");
-        }
-
-        renderObject->transform[0][2] = object->x;
-        renderObject->transform[1][2] = object->y;
-
-        renderObject->tex = tex;
-        renderObject->z_layer = object->z_layer;
-        renderObject->z_order = object->z_order;
-        renderObject->z = 0;
-
-        renderObject->x = object->x;
-        renderObject->y = object->y;
-        renderObject->rotation = object->rotation;
-        renderObject->flipx = object->flipx;
-        renderObject->flipy = object->flipy;
-
-        int baseColorChannel = object->base_color_channel;
-        int detailColorChannel = object->detail_color_channel;
-
-        if (objectData->swap_base_detail) {
-            int tmp = baseColorChannel;
-            baseColorChannel = detailColorChannel;
-            detailColorChannel = tmp;
-        }
-
-        switch (objectData->color_type) {
-            case COLOR_TYPE_BASE:
-                renderObject->color = getColorChannel(baseColorChannel);
-                break;
-            case COLOR_TYPE_DETAIL:
-                renderObject->color = getColorChannel(detailColorChannel);
-                break;
-            case COLOR_TYPE_BLACK:
-                renderObject->color.color = 0x000000ff;
-                renderObject->color.blending = false;
-        }
-
+        /*
         // portals
         char* portalString;
         if ((portalString = isPortalId(object->id))) {
@@ -726,53 +701,11 @@ static void levelRender() {
                     renderObject->color.blending = false;
             }
         }
-
-        // children part
-        ObjectDataChild* children = objectData->children;
-
-        for (int i = 0; i < objectData->numChildren; i++) {
-            ObjectDataChild* child = &children[i];
-            texture_info* tex = ht_search(child->texture);
-            if (tex == NULL) {
-                // SYS_Report("Can't find texture %d\n", object->id);
-                continue;
-            }
-
-            RenderObject* renderObject = RDR_RenderCacheAdd(&renderCache);
-            if (!renderObject) {
-                SYS_Report(__FILE__ ": Cannot create render object!!!\n");
-            }
-
-            renderObject->x = object->x + child->x;
-            renderObject->y = object->y + child->y;
-            renderObject->rotation = object->rotation + child->rot;
-            renderObject->flipx = object->flipx != child->flip_x;
-            renderObject->flipy = object->flipy != child->flip_y;
-            renderObject->z_layer = object->z_layer;
-            renderObject->z_order = object->z_order;
-            renderObject->z = child->z;
-            renderObject->tex = tex;
-
-            int baseColorChannel = object->base_color_channel;
-            int detailColorChannel = object->detail_color_channel;
-
-            switch (child->color_type) {
-                case COLOR_TYPE_BASE:
-                    renderObject->color = getColorChannel(baseColorChannel);
-                    break;
-                case COLOR_TYPE_DETAIL:
-                    renderObject->color = getColorChannel(detailColorChannel);
-                    break;
-                case COLOR_TYPE_BLACK:
-                    renderObject->color.color = 0x000000ff;
-                    renderObject->color.blending = false;
-            }
-        }
+        */
     }
 
-    // sort object cache (for layering)
-    merge_sort(renderCache.objects, renderCache.size, sizeof(RenderObject), compare);
-    // qsort(renderCache.objects, renderCache.size, sizeof(RenderObject), compare);
+    // sort object cache (for z order)
+    merge_sort(sortBuffer.objects, sortBuffer.size, sizeof(*sortBuffer.objects), compare);
 
     // --------------------------------------------------------------------
     // Render graphics
@@ -800,32 +733,41 @@ static void levelRender() {
     GFX_LoadTexture(&gameSheetIcons, GX_TEXMAP4);
     GFX_LoadTexture(&gameSheetGlow, GX_TEXMAP5);
 
-    // Render all the objects visible on the screen
     int i = 0;
-    for (; i < renderCache.size; i++) {
-        RenderObject* object = &renderCache.objects[i];
-
+    for (; i < sortBuffer.size; i++) {
+        const LevelObject* object = sortBuffer.objects[i];
         if (object->z_layer > 4) {
             break;
         }
 
+        f32 x = 0.0f;
+        f32 y = 0.0f;
+        f32 scale = 1.0f;
+        u8 alpha = 255;
+
         if (object->x < fadeBoundsL) {
             f32 dist = fadeBoundsL - viewBoundsL;
             f32 factor = (fadeBoundsL - object->x) / dist;
-            object->color.color = object->color.color & 0xffffff00 | (u32)((object->color.color & 0xff) * (1.0f - factor));
-            object->y -= factor * 90.0f;
+            alpha = 255 * (1.0f - factor);
+            // y = -factor * 90.0f;
+            scale = 1.0f - factor;
         }
         if (object->x > fadeBoundsR) {
             f32 dist = viewBoundsR - fadeBoundsR;
             f32 factor = (object->x - fadeBoundsR) / dist;
-            object->color.color = object->color.color & 0xffffff00 | (u32)((object->color.color & 0xff) * (1.0f - factor));
-            object->y -= factor * 90.0f;
+            alpha = 255 * (1.0f - factor);
+            // y = -factor * 90.0f;
+            scale = 1.0f - factor;
         }
+
         if (screenFlipped) {
-            object->x = 2 * camX - object->x;
+            x = 2 * (camX - object->x);
         }
-        // RDR_drawSpriteFromMap(object->tex, (SpriteInfo){ object->x, object->y, object->rotation, object->color && 0xff, object->flipx, object->flipy }, object->colorChannel, view);
-        RDR_drawRenderObject(object, screenFlipped, view);
+
+        Mtx model;
+        guMtxScale(model, scale, scale, 1.0f);
+        guMtxTransApply(model, model, x, y, 0.0f);
+        RDR_drawLevelObject(object, &objectDefaults[object->id], screenFlipped, alpha, model, view);
     }
 
     SpriteInfo playerSprite = {
@@ -852,26 +794,37 @@ static void levelRender() {
             break;
     }
 
-    for (; i < renderCache.size; i++) {
-        RenderObject* object = &renderCache.objects[i];
+    for (; i < sortBuffer.size; i++) {
+        LevelObject* object = sortBuffer.objects[i];
+
+        f32 x = 0.0f;
+        f32 y = 0.0f;
+        f32 scale = 1.0f;
+        u8 alpha = 255;
 
         if (object->x < fadeBoundsL) {
             f32 dist = fadeBoundsL - viewBoundsL;
             f32 factor = (fadeBoundsL - object->x) / dist;
-            object->color.color = object->color.color & 0xffffff00 | (u32)((object->color.color & 0xff) * (1.0f - factor));
-            object->y -= factor * 90.0f;
+            alpha = 255 * (1.0f - factor);
+            // y = -factor * 90.0f;
+            scale = 1.0f - factor;
         }
         if (object->x > fadeBoundsR) {
             f32 dist = viewBoundsR - fadeBoundsR;
             f32 factor = (object->x - fadeBoundsR) / dist;
-            object->color.color = object->color.color & 0xffffff00 | (u32)((object->color.color & 0xff) * (1.0f - factor));
-            object->y -= factor * 90.0f;
+            alpha = 255 * (1.0f - factor);
+            // y = -factor * 90.0f;
+            scale = 1.0f - factor;
         }
+
         if (screenFlipped) {
-            object->x = 2 * camX - object->x;
+            x = 2 * (camX - object->x);
         }
-        // RDR_drawSpriteFromMap(object->tex, (SpriteInfo){ object->x, object->y, object->rotation, object->flipx, object->flipy }, object->colorChannel, view);
-        RDR_drawRenderObject(object, screenFlipped, view);
+
+        Mtx model;
+        guMtxScale(model, scale, scale, 1.0f);
+        guMtxTransApply(model, model, x, y, 0.0f);
+        RDR_drawLevelObject(object, &objectDefaults[object->id], screenFlipped, alpha, model, view);
     }
 
     // Draw line (VERY IMPORTANT)
@@ -897,7 +850,7 @@ static void levelRender() {
     guMtxTransApply(model, model, 0.0f, offset, 0.0f);
     offset = Font_RenderText(&font, &fontTexture, buf, 16.0f, ALIGN_LEFT, 600.0f, model);
 
-    snprintf(buf, 100, "Objects: %d/%d (%d/%d bytes)", renderCache.size, objectsSize, renderCache.capacity * sizeof(LevelObject), objectsSize * sizeof(LevelObject));
+    snprintf(buf, 100, "Objects: %d/%d (%d/%d bytes)", sortBuffer.size, objectsSize, sortBuffer.capacity * sizeof(LevelObject), objectsSize * sizeof(LevelObject));
     guMtxTransApply(model, model, 0.0f, offset, 0.0f);
     offset = Font_RenderText(&font, &fontTexture, buf, 16.0f, ALIGN_LEFT, 600.0f, model);
 
