@@ -13,6 +13,7 @@
 #include "constants.h"
 #include "BMFont.h"
 #include "gfx.h"
+#include "ogc/system.h"
 #include "parse/level.h"
 #include "parse/plist.h"
 #include "util/hash_table.h"
@@ -63,6 +64,8 @@ static const char* plistFiles[] = {
 u64 start = 0;
 
 int main(int argc, char** argv) {
+    SYS_STDIO_Report(true);
+
     GFX_InitVideo();
     GFX_Init();
 

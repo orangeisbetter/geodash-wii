@@ -3,14 +3,13 @@
 #include <stdio.h>
 #include <zlib.h>
 #include <malloc.h>
-#include <assert.h>
 #include <string.h>
 #include <errno.h>
 #include <stdlib.h>
 
 #include "../base64.h"
-#include "../data.h"
 #include "../color.h"
+#include "../util/error.h"
 
 #define CHUNK_SIZE 8192
 
@@ -204,8 +203,6 @@ Color parseColor(char* colorString) {
         .blending = false
     };
 
-    SYS_Report("color string: %s\n", colorString);
-
     for (char* key = strtok(colorString, "_"); key && key[0]; key = strtok(NULL, "_")) {
         char* value = strtok(NULL, "_");
         // should always be key-value pairs
@@ -230,8 +227,6 @@ Color parseColor(char* colorString) {
             //     break;
         }
     }
-
-    SYS_Report("Resulting color: 0x%08x, blending = %d\n", color.color, color.blending);
 
     return color;
 }
