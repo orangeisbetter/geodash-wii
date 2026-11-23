@@ -1,0 +1,11 @@
+CompileFlags:
+  Add:
+    - --target=powerpc-eabi
+    - -DGEKKO
+    - -D__wii__
+    - -DHW_RVL
+  Remove:
+    - -mrvl
+    - -mcpu=750
+    - -meabi
+    - -mhard-float

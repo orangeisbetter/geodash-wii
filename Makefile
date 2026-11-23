@@ -21,7 +21,7 @@ BUILD		:=	build
 SOURCES		:=	source source/vendor source/parse source/util source/game
 DATA		:=	data
 TEXTURES	:=  textures
-INCLUDES	:=
+INCLUDES	:=	source/vendor
 
 SDPATH = F:\apps\game
 
@@ -37,7 +37,7 @@ LDFLAGS	=	-g $(MACHDEP) -Wl,-Map,$(notdir $@).map
 #---------------------------------------------------------------------------------
 # any extra libraries we wish to link with the project
 #---------------------------------------------------------------------------------
-LIBS	:=	-lfat -l:libz.a -lwiiuse -lbte -lmad -lasnd -logc -lm -lcjson
+LIBS	:=	-lfat -l:libz.a -lwiiuse -lbte -lmad -lasnd -logc -lm
 
 #---------------------------------------------------------------------------------
 # list of directories containing libraries, this must be the top level containing
