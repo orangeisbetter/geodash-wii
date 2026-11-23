@@ -641,6 +641,28 @@ static void levelRun(f32 deltaTime) {
     }
 }
 
+void figureOutPortalOffset(LevelObject* portalObject){
+    SYS_Report("portal rotation of id %d: %f\n", portalObject->id, portalObject->rotation);
+
+    f32 defaultOffset = 1.0f;
+    switch(portalObject->id){
+        case 45:
+            defaultOffset = 0;
+        break;
+        case 13:
+        case 47:
+            defaultOffset = 2;
+        break;
+    }
+    if(portalObject->rotation == 90.0f){
+        portalObject->x -= defaultOffset;
+    }else if(portalObject->rotation == 270.0f || portalObject->rotation == -90.0f){
+        portalObject->x += defaultOffset;
+    }else{
+        portalObject->y -= defaultOffset;
+    }   
+}
+
 static void levelRender() {
     f32 mirrorScale = cosf(mirrorProgress * M_PI);
     mirrored = mirrorScale < 0.0f;
@@ -760,17 +782,16 @@ static void levelRender() {
     GFX_LoadTexture(&gameSheetGlow, GX_TEXMAP5);
 
     int i = 0;
-    int itoreturnto = -1;
+    int itoreturnto = 0;
     for (; i < sortBuffer.size; i++) {
         const LevelObject* object = sortBuffer.objects[i];
         if (object->z_layer > 4) {
-            if(itoreturnto == -1){
-                itoreturnto = i;
-            }
             char* portalTexture = isPortalId(object->id);
             if(portalTexture == NULL){
                 continue;
             }
+        }else{
+            itoreturnto++;
         }
 
         f32 x = 0.0f;
@@ -802,44 +823,22 @@ static void levelRender() {
             RDR_drawLevelObject(object, &objectDefaults[object->id], mirrored, alpha, model, view);
         }else{
             LevelObject notObject;
-            notObject.id = object->id;
-            notObject.x = object->x + 1;
-            notObject.y = object->y - 1;
-            notObject.rotation = object->rotation;
-            notObject.flipx = object->flipx;
-            notObject.flipy = object->flipy;
-            notObject.z_layer = object->z_layer;
-            notObject.z_order = object->z_order;
-            notObject.is_trigger = object->is_trigger;
-            notObject.red = object->red;
-            notObject.green = object->green;
-            notObject.blue = object->blue;
-            notObject.duration = object->duration;
-            notObject.opacity = object->opacity;
-            notObject.color_channel = object->color_channel;
-            notObject.player_color_1 = object->player_color_1;
-            notObject.player_color_2 = object->player_color_2;
-            notObject.blending = object->blending;
-            notObject.base_color_channel = object->base_color_channel;
-            notObject.detail_color_channel = object->detail_color_channel;
-
+            notObject = *object;
+            figureOutPortalOffset(&notObject);         
+            
             ObjectData notObjectDefaults;
+            notObjectDefaults = objectDefaults[object->id];
             notObjectDefaults.exists = true;
             notObjectDefaults.texture = isPortalId(object->id);
             notObjectDefaults.default_z_layer = 0;
             notObjectDefaults.default_z_order = 0;
-            notObjectDefaults.default_base_color_channel = objectDefaults[object->id].default_base_color_channel;
-            notObjectDefaults.default_detail_color_channel = objectDefaults[object->id].default_detail_color_channel;
-            notObjectDefaults.color_type = objectDefaults[object->id].color_type;
-            notObjectDefaults.swap_base_detail = objectDefaults[object->id].swap_base_detail;
             notObjectDefaults.numChildren = 0;
-            notObjectDefaults.hitbox = objectDefaults[object->id].hitbox;
             
             RDR_drawLevelObject(&notObject, &notObjectDefaults, mirrored, alpha, model, view);
         }
     }
     i = itoreturnto;
-
+  
     SpriteInfo playerSprite = {
         .x = camX + (player.x - camX) * mirrorScale,
         .y = player.y,
