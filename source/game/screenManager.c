@@ -51,7 +51,7 @@ void runState(f32 deltaTime) {
             currentState->render();
         }
     }
-
+    
     if (fadeStatus != FADE_NONE) {
         drawFade();
     }

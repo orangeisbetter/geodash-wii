@@ -32,6 +32,7 @@ typedef struct {
     f32 x;
     f32 y;
     f32 rotation;
+    f32 scale;
     bool flipx;
     bool flipy;
 } SpriteInfo;
@@ -48,6 +49,7 @@ extern GXTexObj gameSheet03;
 extern GXTexObj gameSheet04;
 extern GXTexObj gameSheetIcons;
 extern GXTexObj gameSheetGlow;
+extern GXTexObj launchSheet;
 
 extern GXTexObj backgroundTexture;
 extern GXTexObj groundTexture;
