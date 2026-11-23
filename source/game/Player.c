@@ -74,11 +74,11 @@ void playerPadJump(Player* player, float velocity) {
     player->grounded = false;
 }
 
-void playerRingJump(Player* player, float strength) {
+void playerRingJump(Player* player, float velocity) {
     if (player->queuedHold) {
         player->queuedHold = false;
 
-        player->velY = player->jumpVel * strength * player->gravityModifier;
+        player->velY = velocity * player->gravityModifier;
         player->grounded = false;
     }
 }

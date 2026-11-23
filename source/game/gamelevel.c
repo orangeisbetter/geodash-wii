@@ -66,7 +66,8 @@ typedef enum {
     PAD,
     PORTAL,
     ORB,
-    TRIGGER
+    TRIGGER,
+    BOOST
 } CollisionType;
 
 ObjectData* objectDefaults = NULL;
@@ -91,13 +92,15 @@ static f32 mirrorProgress = 0.0f;
 static const f32 mirrorTransitionTime = 0.5f;
 static bool mirrored = false;
 
+// Horizontal speed in units per second, indexed by Speed (level setting kA4 / speed portals)
+static const f32 playerSpeeds[] = { 311.58f, 251.16f, 387.42f, 468.0f, 576.0f };
 static const f32 velCubeJump = 1.94f;
 static const f32 velYellowPad = 2.77f;
-// static const f32 velPinkPad = 1.79f;
+static const f32 velPinkPad = 1.79f;
 // static const f32 velRedPad = 3.65f;
 static const f32 velBluePad = -1.37f;
 static const f32 velYellowOrb = 1.91f;
-// static const f32 velPinkOrb = 1.37f;
+static const f32 velPinkOrb = 1.37f;
 // static const f32 velRedOrb = 2.68f;
 static const f32 velBlueOrb = -1.37f;
 // static const f32 velGreenOrb = -1.91f;
@@ -232,6 +235,8 @@ int getCollisionType(const LevelObject* object) {
             return SOLID;
         case 35: // yellow
         case 67: // blue
+        case 140: // pink
+        case 1332: // bump_02_001.png
             return PAD;
         case 10: // blue
         case 11: // yellow
@@ -244,7 +249,15 @@ int getCollisionType(const LevelObject* object) {
             return PORTAL;
         case 36: // yellow
         case 84: // blue
+        case 141: // pink
+        // case 1022: //gravJumpRing_01_001.png
+        // case 1330: //dropRing_01_001.png
+        // case 1333: //ring_02_001.png
+        // case 1704: //dashRing_01_001.png
+        // case 1751: //dashRing_02_001.png
             return ORB;
+        case 202:
+            return BOOST;
         default:
             return NONE; // no collision
     }
@@ -352,11 +365,43 @@ void checkCollisions(Player* player, float dt) {
                     player->canJump = false;
                     break;
                 case PAD:
-                    playerPadJump(player, 16.0f);
+                    // SYS_Report("padid: %d\n", object->id);
+                    switch(object->id){
+                        case 35:
+                            playerPadJump(player, velYellowPad * playerSpeeds[0] / (60.0f * 0.9f));
+                        break;
+                        case 67:
+                            SYS_Report("velocity before: %f\n", player->velY);
+                            flipGravity(player, !player->gravityFlipped);
+                            playerPadJump(player, velBluePad * playerSpeeds[0] / (60.0f * 0.9f));
+                            SYS_Report("velocity after: %f\n", player->velY);
+                        break;
+                        case 140:
+                            playerPadJump(player, velPinkPad * playerSpeeds[0] / (60.0f * 0.9f));
+                        break;
+                    }
                     break;
                 case ORB:
-                    playerRingJump(player, 1);
+                    // SYS_Report("orbid: %d\n", object->id);
+                    switch(object->id){
+                        case 36:
+                            playerRingJump(player, velYellowOrb * playerSpeeds[0] / (60.0f * 0.9f));
+                        break;
+                        case 84:
+                            flipGravity(player, !player->gravityFlipped);
+                            playerRingJump(player, velBlueOrb * playerSpeeds[0] / (60.0f * 0.9f));
+                        break;
+                        case 141:
+                            playerRingJump(player, velPinkOrb * playerSpeeds[0] / (60.0f * 0.9f));
+                        break;
+                    }
                     break;
+                case BOOST:
+                    switch(object->id){
+                        case 202:
+                            player->velX = playerSpeeds[2] / (60.0f * 0.9f);
+                        break;
+                    }
                 default:
                     playerCollideWithObject(player, object, &objectDefaults[object->id]);
                     break;
@@ -709,6 +754,9 @@ static void levelRender() {
         if (object->x < viewBoundsL || object->x > viewBoundsR) {
             continue;
         }
+        
+            //SYS_Report("this unknown object is on screen: %s\n", objectDefaults[object->id].texture);
+        
 
         // then check to see it it's an animation trigger
 
