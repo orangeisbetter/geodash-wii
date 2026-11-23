@@ -2,7 +2,8 @@
 [ ] cube rotation
 [ ] level settings (default colors, etc)
 [X] fading color triggers
-[ ] Horizontal portals should not halve velocity (for some reason that's how it works, idk) also hitboxes
+[ ] Horizontal portals should not halve velocity (for some reason that's how it works, idk)
+[X] hitboxes should rotate for rotated objects
 [ ] particles and streaks
 [ ] proper death handling (play death sound, freeze for a few frames, then restart)
 [X] asynchronous level loading (use multithreading)
