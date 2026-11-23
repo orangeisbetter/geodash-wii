@@ -210,7 +210,7 @@ int main(int argc, char** argv) {
 
         float dt = 1.0f / (float)refresh_rate;
         runState(dt);
-        // updateColorChannels(dt);
+        updateColorChannels(dt);
 
         GX_DrawDone();
 

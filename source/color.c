@@ -72,20 +72,49 @@ Color getColorChannel(int channel) {
     return colors[channel];
 }
 
+static u32 lerpColor(u32 from, u32 to, f32 t) {
+    u32 result = 0;
+    for (int shift = 0; shift < 32; shift += 8) {
+        s32 a = (from >> shift) & 0xff;
+        s32 b = (to >> shift) & 0xff;
+        result |= (u32)(a + (b - a) * t) << shift;
+    }
+    return result;
+}
+
 void setColorChannel(int channel, Color newColor, f32 duration) {
-    colorTransitionData[channel].oldColor = colors[channel];
-    colorTransitionData[channel].newColor = newColor;
-    colorTransitionData[channel].duration = duration;
-    // colors[channel] = newColor;
+    ColorTransitionData* transition = &colorTransitionData[channel];
+
+    if (duration <= 0.0f) {
+        // Instant change
+        colors[channel] = newColor;
+        transition->duration = 0.0f;
+        transition->timeElapsed = 0.0f;
+        return;
+    }
+
+    transition->oldColor = colors[channel];
+    transition->newColor = newColor;
+    transition->duration = duration;
+    transition->timeElapsed = 0.0f;
+
+    colors[channel].blending = newColor.blending;
 }
 
 void updateColorChannels(f32 dt){
     for(int i=0; i<1024; i++){
-        if(colorTransitionData[i].timeElapsed < colorTransitionData[i].duration){
-            SYS_Report("simply putting code inside this if statement causes stuff not to be rendered regardless of if it's even getting called!!!\n");
-            // colors[i].blending = colorTransitionData[i].newColor.blending;
-            // colorTransitionData[i].timeElapsed += dt;
-            // colors[i].color = (colorTransitionData[i].newColor.color - colorTransitionData[i].oldColor.color) * colorTransitionData[i].timeElapsed / colorTransitionData[i].duration + colorTransitionData[i].newColor.color;
+        ColorTransitionData* transition = &colorTransitionData[i];
+        if (transition->timeElapsed >= transition->duration) {
+            continue;
         }
+        
+        transition->timeElapsed += dt;
+
+        f32 t = transition->timeElapsed / transition->duration;
+        if (t > 1.0f) {
+            t = 1.0f;
+        }
+
+        colors[i].color = lerpColor(transition->oldColor.color, transition->newColor.color, t);
     }
 }
