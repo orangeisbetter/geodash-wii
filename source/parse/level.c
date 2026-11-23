@@ -10,6 +10,7 @@
 
 #include "../base64.h"
 #include "../data.h"
+#include "../color.h"
 
 #define CHUNK_SIZE 8192
 
@@ -172,6 +173,7 @@ char* getNextData(char* string, int* length, char** nextString, bool* lastOfObje
             break;
     }
     *nextString = string;
+    start[*length] = '\0';
     return start;
 }
 
@@ -196,7 +198,7 @@ const LevelObject defaultObject = {
     .blending = false,
 };
 
-LevelObject* GDL_ParseLevelString(char* levelString, int* size, ObjectData* dataObjects) {
+LevelObject* GDL_ParseLevelString(char* levelString, int* size, ObjectData* dataObjects, LevelData* levelData) {
     int objectsCapacity = 100;
     LevelObject* objects = malloc(objectsCapacity * sizeof(LevelObject));
     if (!objects) {
@@ -208,13 +210,170 @@ LevelObject* GDL_ParseLevelString(char* levelString, int* size, ObjectData* data
     int key = 0;
 
     LevelObject object = defaultObject;
-
+   
     int length;
     bool last;
 
+    levelData->colorConfig.length = 0;
+
     // Skip level settings (for now)
     do {
-        getNextData(levelString, &length, &levelString, &last);
+        char* levelDataString = getNextData(levelString, &length, &levelString, &last);
+        // levelData[length] = '\0';
+        assert(levelDataString[0] == 'k');
+        char val1 = levelDataString[1];
+        int val2 = atoi(&levelDataString[2]);
+        
+        char* value = getNextData(levelString, &length, &levelString, &last);
+        // value[length] = '\0';
+        // SYS_Report("val1: %c, val2: %d\n", val1, val2);
+        // SYS_Report("level data object: %s, %s\n", levelDataString, value);
+        switch (val1){
+            case 'A':
+                switch (val2){
+                    case 2:
+                        levelData->gamemode = atoi(value);
+                    break;
+                    case 3:
+                        levelData->minimode = atoi(value);
+                    break;
+                    case 4:
+                        levelData->speed = atoi(value);
+                    break;
+                    case 5:
+                        levelData->obj2Blending = atoi(value);
+                    break;
+                    case 6:
+                        levelData->BGTexId = atoi(value);
+                    break;
+                    case 7:
+                        levelData->groundTexId = atoi(value);
+                    break;
+                    case 8:
+                        levelData->dualMode = atoi(value);
+                    break;
+                    case 9:
+                        levelData->startPosObj = atoi(value);
+                    break;
+                    case 10:
+                        levelData->multiPlayerMode = atoi(value);
+                    break;
+                    case 11:
+                        levelData->flipGravity = atoi(value);
+                    break;
+                    case 13:
+                        levelData->songOffset = atof(value);
+                    break;
+                    case 14:
+                        // levelData.guideline = value
+                    break;
+                    case 15:
+                        levelData->fadeIn = atoi(value);
+                    break;
+                    case 16:
+                        levelData->fadeOut = atoi(value);
+                    break;
+                    case 17:
+                        levelData->groundLineId = atoi(value);
+                    break;
+                    case 18:
+                        levelData->font = atoi(value);
+                    break;
+                    case 20:
+                        levelData->reverseMode = atoi(value);
+                    break;
+                    case 22:
+                        levelData->platformerMode = atoi(value);
+                    break;
+                    case 25:
+                        levelData->middlegroundTexId = atoi(value);
+                    break;
+                    case 28:
+                        levelData->mirrorMode = atoi(value);
+                    break;
+                    case 29:
+                        levelData->rotateGameplay = atoi(value);
+                    break;
+                }
+            break;
+
+            case 'S':
+                u32 R = 1000;
+                u32 G = 1000;
+                u32 B = 1000;
+                char* val3 = strtok(value, "_");
+                while(val3){
+                    
+                    char* val4 = strtok(NULL, "_");
+
+                    switch (atoi(val3)){
+                        case 1:
+                            R = (u8)atoi(val4) << 24;
+                        break;
+                        case 2:
+                            G = (u8)atoi(val4) << 16;
+                        break;
+                        case 3:
+                            B = (u8)atoi(val4) << 8;
+                        break;
+                    }
+
+                    val3 = strtok(NULL, "_");
+                }
+                if(R == 1000 || G == 1000 || B == 1000){
+                    break;
+                }
+                Color color = {
+                    // .color = ((u32)R << 24) + ((u32)G << 16) + ((u32)B << 8) + 0xff,
+                    .color = R + G + B + 0xff,
+                    false
+                };
+                int channelId = -1;
+                switch (val2){
+                    case 29:
+                        channelId = 1000;
+                    break;
+
+                    case 30:
+                        channelId = 1001;
+                    break;
+                    case 31:
+
+                        channelId = 1002;
+                    break;
+                    
+                    case 32:
+                        channelId = 1004;
+                    break;
+                    
+                    case 33:
+                        channelId = 1;
+                    break;
+                    
+                    case 34:
+                        channelId = 2;
+                    break;
+                    
+                    case 35:
+                        channelId = 3;
+                    break;
+                    
+                    case 36:
+                        channelId = 4;
+                    break;
+                    
+                    case 37:
+                        channelId = 1003;
+                    break;
+                }
+                if(channelId == -1){
+                    break;
+                }
+                levelData->colorConfig.colors[levelData->colorConfig.length] = (ColorData){channelId, color};
+                levelData->colorConfig.length++;
+            break;
+        
+        }
     } while (!last);
 
     // Parse level objects

@@ -83,9 +83,13 @@ static FILE* music;
 
 static f32 camX;
 static f32 camY;
+static f32 backgroundPosition;
 
 static f32 lastX;
 static bool screenFlipped = false;
+static f32 mirrorProgress = 0.0f;
+static const f32 mirrorTransitionTime = 0.5f;
+static bool mirrored = false;
 
 static const f32 velCubeJump = 1.94f;
 static const f32 velYellowPad = 2.77f;
@@ -103,6 +107,7 @@ static const f32 cameraVerticalBounds_2 = 75.0f;
 
 Player player = { 0 };
 
+static LevelData levelData;
 static LevelObject* objects;
 static int objectsSize;
 
@@ -359,8 +364,8 @@ void* loadThreadHandler(void* data) {
         currentLevel = NULL;
         return NULL;
     }
-
-    objects = GDL_ParseLevelString(levelString, &objectsSize, objectDefaults);
+    // SYS_Report("%100s\n", levelString)
+    objects = GDL_ParseLevelString(levelString, &objectsSize, objectDefaults, &levelData);
     if (!objects) {
         currentLevel = NULL;
         return NULL;
@@ -390,17 +395,28 @@ int loadLevel(int levelId) {
     return 1;
 }
 
-void levelRestart() {
+void levelInit(){
     lastX = 0.0f;
 
     camX = 0.0f;
     camY = cameraVerticalBounds_2;
 
     screenFlipped = false;
+    mirrorProgress = 0.0f;
 
     playerInit(&player);
 
-    colorInit();
+    colorInit(levelData.colorConfig);
+
+    player.gamemode = levelData.gamemode;
+    screenFlipped = levelData.mirrorMode;
+    mirrored = levelData.mirrorMode;
+    mirrorProgress = levelData.mirrorMode ? 1.0f : 0.0f;
+    flipGravity(&player, levelData.flipGravity);
+}
+
+void levelRestart() {
+    levelInit();
 
     MP3Player_Stop();
     fseek(music, 0, SEEK_SET);
@@ -413,16 +429,7 @@ static void levelEnter() {
         SYS_Report("Level loading failed!!!\n");
     }
 
-    lastX = 0.0f;
-
-    camX = 0.0f;
-    camY = cameraVerticalBounds_2;
-
-    screenFlipped = false;
-
-    playerInit(&player);
-
-    colorInit();
+    levelInit();
 
     sortBuffer.capacity = 256;
     sortBuffer.objects = malloc(sizeof(*sortBuffer.objects) * sortBuffer.capacity);
@@ -490,6 +497,22 @@ static void updateCamera(Player* player) {
     camY += (candidatePosition - camY) / easeValue;
 }
 
+static void updateMirror(f32 dt){
+    f32 step = dt / mirrorTransitionTime;
+
+    if (screenFlipped) {
+        mirrorProgress += step;
+        if (mirrorProgress > 1.0f) {
+            mirrorProgress = 1.0f;
+        }
+    } else {
+        mirrorProgress -= step;
+        if (mirrorProgress < 0.0f) {
+            mirrorProgress = 0.0f;
+        }
+    }
+}
+
 static void updateVisibility() {
 }
 
@@ -506,9 +529,11 @@ static void update(f32 dt) {
         playerUpdate(&player, step);
         checkCollisions(&player, step);
     }
-
+    backgroundPosition += player.velX * deltaFrames * 0.9f * (-mirrored * 2 + 1);
     updateCamera(&player);
+    updateMirror(dt);
     updateVisibility();
+    // updateColorChannels(dt);
 }
 
 static void levelRun(f32 deltaTime) {
@@ -583,34 +608,34 @@ static void levelRun(f32 deltaTime) {
                 Color colorObj = { color, object->blending };
                 switch (object->id) {
                     case 29:
-                        setColorChannel(1000, colorObj);
+                        setColorChannel(1000, colorObj, object->duration);
                         break;
                     case 30:
-                        setColorChannel(1001, colorObj);
+                        setColorChannel(1001, colorObj, object->duration);
                         break;
                     case 104:
-                        setColorChannel(1002, colorObj);
+                        setColorChannel(1002, colorObj, object->duration);
                         break;
                     case 105:
-                        setColorChannel(1004, colorObj);
+                        setColorChannel(1004, colorObj, object->duration);
                         break;
                     case 744:
-                        setColorChannel(1003, colorObj);
+                        setColorChannel(1003, colorObj, object->duration);
                         break;
                     case 221:
-                        setColorChannel(1, colorObj);
+                        setColorChannel(1, colorObj, object->duration);
                         break;
                     case 717:
-                        setColorChannel(2, colorObj);
+                        setColorChannel(2, colorObj, object->duration);
                         break;
                     case 718:
-                        setColorChannel(3, colorObj);
+                        setColorChannel(3, colorObj, object->duration);
                         break;
                     case 743:
-                        setColorChannel(4, colorObj);
+                        setColorChannel(4, colorObj, object->duration);
                         break;
                     default:
-                        setColorChannel(object->color_channel, colorObj);
+                        setColorChannel(object->color_channel, colorObj, object->duration);
                         break;
                 }
             }
@@ -619,6 +644,9 @@ static void levelRun(f32 deltaTime) {
 }
 
 static void levelRender() {
+    f32 mirrorScale = cosf(mirrorProgress * M_PI);
+    mirrored = mirrorScale < 0.0f;
+
     f32 viewBoundsL = camX - (view_width / 2.0f) / viewScale;
     f32 viewBoundsR = camX + (view_width / 2.0f) / viewScale;
 
@@ -717,8 +745,8 @@ static void levelRender() {
     guMtxIdentity(view);
 
     // Background and ground are special, they don't use the camera view matrix. IT'S ALL AN ILLUSION
-    RDR_drawBackground(&backgroundTexture, screenFlipped ? -camX : camX, camY, 0.49f, getColorChannel(1000).color);
-    RDR_drawGround(&groundTexture, screenFlipped ? -camX : camX, camY, viewScale, getColorChannel(1001).color);
+    RDR_drawBackground(&backgroundTexture, backgroundPosition, camY, 0.45f, getColorChannel(1000).color);
+    RDR_drawGround(&groundTexture, backgroundPosition, camY, viewScale, getColorChannel(1001).color);
 
     // Set up camera view matrix
     guMtxTrans(view, -camX, -camY, -10.0f);
@@ -760,27 +788,22 @@ static void levelRender() {
             scale = 1.0f - factor;
         }
 
-        if (screenFlipped) {
-            x = 2 * (camX - object->x);
-        }
+        x = (object->x - camX) * (mirrorScale - 1.0f);
 
         Mtx model;
         guMtxScale(model, scale, scale, 1.0f);
         guMtxTransApply(model, model, x, y, 0.0f);
-        RDR_drawLevelObject(object, &objectDefaults[object->id], screenFlipped, alpha, model, view);
+        RDR_drawLevelObject(object, &objectDefaults[object->id], mirrored, alpha, model, view);
     }
 
     SpriteInfo playerSprite = {
-        .x = player.x,
+        .x = camX + (player.x - camX) * mirrorScale,
         .y = player.y,
-        .rotation = player.rotation,
-        .flipx = screenFlipped,
+        .rotation = mirrored ? -player.rotation : player.rotation,
+        .scale = 1.0f,
+        .flipx = mirrored,
         .flipy = player.gamemode == GAMEMODE_SHIP && player.gravityFlipped
     };
-
-    if (screenFlipped) {
-        playerSprite.x = 2 * camX - playerSprite.x;
-    }
 
     switch (player.gamemode) {
         case GAMEMODE_CUBE:
@@ -817,14 +840,12 @@ static void levelRender() {
             scale = 1.0f - factor;
         }
 
-        if (screenFlipped) {
-            x = 2 * (camX - object->x);
-        }
+        x = (object->x - camX) * (mirrorScale - 1.0f);
 
         Mtx model;
         guMtxScale(model, scale, scale, 1.0f);
         guMtxTransApply(model, model, x, y, 0.0f);
-        RDR_drawLevelObject(object, &objectDefaults[object->id], screenFlipped, alpha, model, view);
+        RDR_drawLevelObject(object, &objectDefaults[object->id], mirrored, alpha, model, view);
     }
 
     // Draw line (VERY IMPORTANT)

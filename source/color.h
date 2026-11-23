@@ -7,8 +7,20 @@ typedef struct {
     bool blending;
 } Color;
 
-void colorInit();
+typedef struct {
+    u16 colorId;
+    Color color;
+} ColorData;
+
+typedef struct {
+    int length;
+    ColorData colors[16];
+} ColorConfig;
+
+void colorInit(ColorConfig colorConfig);
 
 Color getColorChannel(int channel);
 
-void setColorChannel(int channel, Color newColor);
+void setColorChannel(int channel, Color newColor, f32 duration);
+
+void updateColorChannels(f32 dt);

@@ -1,13 +1,21 @@
 #include "color.h"
 
-static Color colors[1024];
+typedef struct{
+    Color oldColor;
+    Color newColor;
+    f32 duration;
+    f32 timeElapsed;
+} ColorTransitionData;
 
-void colorInit() {
+static Color colors[1024];
+static ColorTransitionData colorTransitionData[1024];
+
+void colorInit(ColorConfig colorConfig) {
     for (int i = 0; i < 1000; i++) {
         colors[i].color = 0xffffffff;
         colors[i].blending = false;
     }
-
+    
     colors[1000].color = 0x287dffff;
     colors[1000].blending = false;
 
@@ -51,12 +59,33 @@ void colorInit() {
 
     colors[1014].color = 0x287dffff;
     colors[1014].blending = false;
+
+    for(int i=0; i<colorConfig.length; i++){
+        colors[colorConfig.colors[i].colorId] = colorConfig.colors[i].color;
+    }
+    for(int i=0; i<1024; i++){
+        colorTransitionData[i] = (ColorTransitionData){colors[i], colors[i], 0.5f, 0.5f};
+    }
 }
 
 Color getColorChannel(int channel) {
     return colors[channel];
 }
 
-void setColorChannel(int channel, Color newColor) {
-    colors[channel] = newColor;
+void setColorChannel(int channel, Color newColor, f32 duration) {
+    colorTransitionData[channel].oldColor = colors[channel];
+    colorTransitionData[channel].newColor = newColor;
+    colorTransitionData[channel].duration = duration;
+    // colors[channel] = newColor;
+}
+
+void updateColorChannels(f32 dt){
+    for(int i=0; i<1024; i++){
+        if(colorTransitionData[i].timeElapsed < colorTransitionData[i].duration){
+            SYS_Report("simply putting code inside this if statement causes stuff not to be rendered regardless of if it's even getting called!!!\n");
+            // colors[i].blending = colorTransitionData[i].newColor.blending;
+            // colorTransitionData[i].timeElapsed += dt;
+            // colors[i].color = (colorTransitionData[i].newColor.color - colorTransitionData[i].oldColor.color) * colorTransitionData[i].timeElapsed / colorTransitionData[i].duration + colorTransitionData[i].newColor.color;
+        }
+    }
 }

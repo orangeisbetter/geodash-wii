@@ -2,6 +2,8 @@
 
 #include <gccore.h>
 #include "object.h"
+#include "../color.h"
+#include "../game/gamemode.h"
 
 typedef struct {
     int id;
@@ -29,6 +31,40 @@ typedef struct {
     u16 base_color_channel;
     u16 detail_color_channel;
 } LevelObject;
+
+typedef enum{
+    ONE,
+    HALF,
+    TWO,
+    THREE,
+    FOUR
+} Speed;
+
+typedef struct{
+    ColorConfig colorConfig;
+    Gamemode gamemode;
+    bool minimode;
+    Speed speed;
+    bool obj2Blending;
+    int BGTexId;
+    int groundTexId;
+    bool dualMode;
+    bool startPosObj;
+    bool multiPlayerMode;
+    bool flipGravity;
+    f32 songOffset;
+    // GuidelineString guidelineString;
+    bool fadeIn;
+    bool fadeOut;
+    int groundLineId;
+    int font;
+    bool reverseMode;
+    bool platformerMode;
+    int middlegroundTexId;
+    bool mirrorMode;
+    bool rotateGameplay;
+
+} LevelData;
 
 typedef struct {
     int id;
@@ -90,6 +126,6 @@ typedef struct {
 
 char* GDL_OpenDecodedFile(char* filename);
 char* GDL_GetLevelString(char* filename);
-LevelObject* GDL_ParseLevelString(char* levelString, int* size, ObjectData* dataObjects);
+LevelObject* GDL_ParseLevelString(char* levelString, int* size, ObjectData* dataObjects, LevelData* levelData);
 
 // GDLevel* GDL_parseLevel(char* levelString);

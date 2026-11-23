@@ -26,6 +26,7 @@
 #include "game/screenManager.h"
 #include "parse/levelinfo.h"
 #include "parse/mappack.h"
+#include "pointer.h"
 
 s8 HWButton = -1;
 
@@ -55,7 +56,8 @@ static const char* plistFiles[] = {
     ASSETS_PATH "GJ_GameSheet03.plist",
     ASSETS_PATH "GJ_GameSheet04.plist",
     ASSETS_PATH "GJ_GameSheetIcons.plist",
-    ASSETS_PATH "GJ_GameSheetGlow.plist"
+    ASSETS_PATH "GJ_GameSheetGlow.plist",
+    ASSETS_PATH "GJ_LaunchSheet.plist"
 };
 
 u64 start = 0;
@@ -87,6 +89,7 @@ int main(int argc, char** argv) {
     loadFont();
 
     WPAD_Init();
+    PTR_Init();
 
     // Legal notice, blocking call
     legalNotice(&font, &fontTexture, &HWButton);
@@ -183,7 +186,12 @@ int main(int argc, char** argv) {
 
     TPL_GetTexture(&groundTPL, 0, &groundTexture);
 
-    RDR_loadSpriteSheets();
+    if (!RDR_loadSpriteSheets()) {
+        SYS_Report("Failed to load sprite sheets!\n");
+        exit(EXIT_FAILURE);
+    }
+    // struct mallinfo mi = mallinfo();
+    // SYS_Report("Heap in use: %d bytes\n", mi.uordblks);
 
     SYS_Report("Textures loaded. (%f ms)\n", ticks_to_microsecs(gettime() - start) / 1000.0f);
 
@@ -193,6 +201,7 @@ int main(int argc, char** argv) {
     // Main game loop
     while (HWButton == -1) {
         WPAD_ScanPads();
+        PTR_Update();
         u32 pressed = WPAD_ButtonsDown(0);
 
         if (pressed & WPAD_BUTTON_HOME) {
@@ -201,6 +210,7 @@ int main(int argc, char** argv) {
 
         float dt = 1.0f / (float)refresh_rate;
         runState(dt);
+        // updateColorChannels(dt);
 
         GX_DrawDone();
 

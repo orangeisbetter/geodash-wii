@@ -17,52 +17,76 @@ GXTexObj gameSheet03;
 GXTexObj gameSheet04;
 GXTexObj gameSheetIcons;
 GXTexObj gameSheetGlow;
+GXTexObj launchSheet;
 BMFont font;
 GXTexObj fontTexture;
 
 static TPLFile spriteTPL;
-static TexSize texSizes[6];
+static TexSize texSizes[7];
 
 int RDR_loadSpriteSheets() {
     if (TPL_OpenTPLFromFile(&spriteTPL, ASSETS_PATH "GJ_GameSheet.tpl") != 1) {
         return 0;
     }
 
-    TPL_GetTexture(&spriteTPL, 0, &spriteSheet);
+    //SYS_Report("heap in use: %d, MEM1 lo %p hi %p\n", mallinfo().uordblks, SYS_GetArena1Lo(), SYS_GetArena1Hi());
+
+    s32 ret = TPL_GetTexture(&spriteTPL, 0, &spriteSheet);
     texSizes[0] = (TexSize){
         GX_GetTexObjWidth(&spriteSheet),
         GX_GetTexObjHeight(&spriteSheet)
     };
 
-    TPL_GetTexture(&spriteTPL, 1, &gameSheet02);
+//    SYS_Report("sheet 0: ret %d, data %p, %dx%d\n", ret, GX_GetTexObjData(&spriteSheet),
+//             GX_GetTexObjWidth(&spriteSheet), GX_GetTexObjHeight(&spriteSheet));
+
+    ret = TPL_GetTexture(&spriteTPL, 1, &gameSheet02);
     texSizes[1] = (TexSize){
         GX_GetTexObjWidth(&gameSheet02),
         GX_GetTexObjHeight(&gameSheet02)
     };
+// SYS_Report("sheet 1: ret %d, data %p, %dx%d\n", ret, GX_GetTexObjData(&gameSheet02),
+//             GX_GetTexObjWidth(&gameSheet02), GX_GetTexObjHeight(&gameSheet02));
 
-    TPL_GetTexture(&spriteTPL, 2, &gameSheet03);
+    ret = TPL_GetTexture(&spriteTPL, 2, &gameSheet03);
     texSizes[2] = (TexSize){
         GX_GetTexObjWidth(&gameSheet03),
         GX_GetTexObjHeight(&gameSheet03)
     };
+// SYS_Report("sheet 2: ret %d, data %p, %dx%d\n", ret, GX_GetTexObjData(&gameSheet03),
+//             GX_GetTexObjWidth(&gameSheet03), GX_GetTexObjHeight(&gameSheet03));
 
-    TPL_GetTexture(&spriteTPL, 3, &gameSheet04);
+    ret = TPL_GetTexture(&spriteTPL, 3, &gameSheet04);
     texSizes[3] = (TexSize){
         GX_GetTexObjWidth(&gameSheet04),
         GX_GetTexObjHeight(&gameSheet04)
     };
+// SYS_Report("sheet 3: ret %d, data %p, %dx%d\n", ret, GX_GetTexObjData(&gameSheet04),
+//             GX_GetTexObjWidth(&gameSheet04), GX_GetTexObjHeight(&gameSheet04));
 
-    TPL_GetTexture(&spriteTPL, 4, &gameSheetIcons);
+    ret = TPL_GetTexture(&spriteTPL, 4, &gameSheetIcons);
     texSizes[4] = (TexSize){
         GX_GetTexObjWidth(&gameSheetIcons),
         GX_GetTexObjHeight(&gameSheetIcons)
     };
+// SYS_Report("sheet 4: ret %d, data %p, %dx%d\n", ret, GX_GetTexObjData(&gameSheetIcons),
+//             GX_GetTexObjWidth(&gameSheetIcons), GX_GetTexObjHeight(&gameSheetIcons));
 
-    TPL_GetTexture(&spriteTPL, 5, &gameSheetGlow);
+    ret = TPL_GetTexture(&spriteTPL, 5, &gameSheetGlow);
     texSizes[5] = (TexSize){
         GX_GetTexObjWidth(&gameSheetGlow),
         GX_GetTexObjHeight(&gameSheetGlow)
     };
+// SYS_Report("sheet 5: ret %d, data %p, %dx%d\n", ret, GX_GetTexObjData(&gameSheetGlow),
+//             GX_GetTexObjWidth(&gameSheetGlow), GX_GetTexObjHeight(&gameSheetGlow));
+
+    ret = TPL_GetTexture(&spriteTPL, 6, &launchSheet);
+    texSizes[6] = (TexSize){
+        GX_GetTexObjWidth(&launchSheet),
+        GX_GetTexObjHeight(&launchSheet)
+    };
+// SYS_Report("sheet 6: ret %d, data %p, %dx%d\n", ret, GX_GetTexObjData(&launchSheet),
+//             GX_GetTexObjWidth(&launchSheet), GX_GetTexObjHeight(&launchSheet));
 
     return 1;
 }
@@ -73,7 +97,9 @@ TexSize RDR_getTexSize(int sheetId) {
 
 void RDR_drawBackground(GXTexObj* background, f32 x, f32 y, f32 scale, u32 color) {
     x /= 10000.0f;
+    x /= 0.7f;
     y /= 10000.0f;
+    y += 0.05f;
 
     f32 top = 1.0f - y - scale;
     f32 bottom = 1.0f - y;
@@ -259,20 +285,20 @@ void RDR_drawSpriteFromMap2(texture_info* tex, SpriteInfo* sprite, u32 color, bo
 
     f32 dx = sprite->x;
     f32 dy = sprite->y;
-    f32 dw = tex->spriteSize.x;
-    f32 dh = tex->spriteSize.y;
+    f32 dw = tex->spriteSize.x * sprite->scale;
+    f32 dh = tex->spriteSize.y * sprite->scale;
 
     f32 offsetx = tex->spriteOffset.x;
     f32 offsety = tex->spriteOffset.y;
 
     f32 sizex = tex->textureRotated ? tex->textureRect.size.y : tex->textureRect.size.x;
     f32 sizey = tex->textureRotated ? tex->textureRect.size.x : tex->textureRect.size.y;
-
+    
     f32 u0 = tex->textureRect.pos.x / (f32)RDR_getTexSize(tex->sheetIdx).width;
     f32 u1 = u0 + sizex / (f32)RDR_getTexSize(tex->sheetIdx).width;
     f32 v0 = tex->textureRect.pos.y / (f32)RDR_getTexSize(tex->sheetIdx).height;
     f32 v1 = v0 + sizey / (f32)RDR_getTexSize(tex->sheetIdx).height;
-
+    
     f32 halfW = dw / 2;
     f32 halfH = dh / 2;
 
@@ -292,6 +318,17 @@ void RDR_drawSpriteFromMap2(texture_info* tex, SpriteInfo* sprite, u32 color, bo
     guMtxApplyTrans(model, model, tex->spriteOffset.x, tex->spriteOffset.y, 0.0f);
     guMtxTransApply(model, model, dx, dy, 0.0f);
     guMtxConcat(view, model, modelView);
+
+    // static int debugCount = 0;
+    // if (debugCount < 8) {
+    //     debugCount++;
+    //     SYS_Report("tex %p sheet %d uv %f %f %f %f size %f %f color %08x blend %d\n",
+    //                tex, tex->sheetIdx, u0, u1, v0, v1, dw, dh, color, blending);
+    //     for (int r = 0; r < 3; r++) {
+    //         SYS_Report("  %f %f %f %f\n", modelView[r][0], modelView[r][1], modelView[r][2], modelView[r][3]);
+    //     }
+    // }
+
     GX_LoadPosMtxImm(modelView, GX_PNMTX0);
 
     GFX_BindTexture(tex->sheetIdx);

@@ -2,6 +2,9 @@
 
 #include <gccore.h>
 
+#undef guMtxConcat
+#define guMtxConcat c_guMtxConcat
+
 typedef enum {
     BLEND_NONE,
     BLEND_ALPHA,
@@ -36,7 +39,7 @@ static inline void GFX_ResetDrawMode() {
 
     // Basic TEV setup - outputcolor = inputcolor * texcolor
     GX_SetNumChans(1);
-    GX_SetNumTexGens(6);
+    GX_SetNumTexGens(7);
 
     GX_SetNumTevStages(1);
     GX_SetTevOp(GX_TEVSTAGE0, GX_MODULATE);
