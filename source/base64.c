@@ -56,7 +56,7 @@ int Base64decode_len(const char* bufcoded) {
     register const unsigned char* bufin;
     register int nprbytes;
 
-    while (isspace(*bufcoded)) {
+    while (isspace((int) *bufcoded)) {
         bufcoded++;
     }
     bufin = (const unsigned char*)bufcoded;
@@ -78,7 +78,7 @@ void Base64decode(char* bufplain, const char* bufcoded) {
     register unsigned char* bufout;
     register int nprbytes;
 
-    while (isspace(*bufcoded)) {
+    while (isspace((int) *bufcoded)) {
         bufcoded++;
     }
     bufin = (const unsigned char*)bufcoded;

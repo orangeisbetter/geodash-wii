@@ -108,7 +108,6 @@ ObjectData* getObjectData(const char* filename) {
         cJSON* hitbox = cJSON_GetObjectItem(item, "hitbox");
         if (!cJSON_IsNull(hitbox)) {
             cJSON* type = cJSON_GetObjectItem(hitbox, "type");
-            const char* sv;
             if (cJSON_IsString(type)) {
                 const char* sv = cJSON_GetStringValue(type);
                 if (streq(sv, "Box")) {

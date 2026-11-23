@@ -1,4 +1,5 @@
 #include "plist.h"
+#include "ogc/system.h"
 
 #include <gccore.h>
 #include <stdlib.h>
@@ -34,7 +35,7 @@ void parseFrames(struct xml_node* frames, ht_hash_table* ht, int texIdx) {
         {
             int keylen = xml_string_length(xml_node_content(key));
             stringSize += keylen + 1;
-            xml_string_copy(xml_node_content(key), keyname, MAX_KEY_LENGTH - 1);
+            xml_string_copy(xml_node_content(key), (uint8_t*) keyname, MAX_KEY_LENGTH - 1);
             keyname[keylen < MAX_KEY_LENGTH ? keylen : MAX_KEY_LENGTH - 1] = '\0';
         }
 
@@ -52,7 +53,7 @@ void parseFrames(struct xml_node* frames, ht_hash_table* ht, int texIdx) {
             {
                 struct xml_string* str = xml_node_content(keyNode);
                 int len = xml_string_length(str);
-                xml_string_copy(str, key, MAX_KEY_LENGTH - 1);
+                xml_string_copy(str, (uint8_t*) key, MAX_KEY_LENGTH - 1);
                 key[len < MAX_KEY_LENGTH ? len : MAX_KEY_LENGTH - 1] = '\0';
             }
 
@@ -60,11 +61,9 @@ void parseFrames(struct xml_node* frames, ht_hash_table* ht, int texIdx) {
             {
                 struct xml_string* str = xml_node_content(valueNode);
                 int len = xml_string_length(str);
-                xml_string_copy(str, value, MAX_KEY_LENGTH - 1);
+                xml_string_copy(str, (uint8_t*) value, MAX_KEY_LENGTH - 1);
                 value[len < MAX_KEY_LENGTH ? len : MAX_KEY_LENGTH - 1] = '\0';
             }
-
-            // SYS_Report("{%s: %s}\n", key, value);
 
             if (strcmp(key, "spriteOffset") == 0) {
                 parse_vec2(value, &tex_info.spriteOffset);
@@ -78,12 +77,10 @@ void parseFrames(struct xml_node* frames, ht_hash_table* ht, int texIdx) {
                 char boolValue[6];
                 boolValue[4] = '\0';
                 boolValue[5] = '\0';
-                xml_string_copy(xml_node_name(valueNode), boolValue, 5);
+                xml_string_copy(xml_node_name(valueNode), (uint8_t*) boolValue, 5);
                 parse_bool(boolValue, &tex_info.textureRotated);
             }
         }
-
-        // SYS_Report("Rect: (%f, %f) (%fx%f)\n", tex_info.textureRect.pos.x, tex_info.textureRect.pos.y, tex_info.textureRect.size.x, tex_info.textureRect.size.y);
 
         ht_insert(keyname, tex_info);
     }

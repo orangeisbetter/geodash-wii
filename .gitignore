@@ -1,6 +1,8 @@
 build/
+.cache/
 boot.dol
 boot.elf
 assets
 assets/
 textures/*.png
+compile_commands.json

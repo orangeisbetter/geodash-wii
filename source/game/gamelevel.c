@@ -537,8 +537,6 @@ static void update(f32 dt) {
 }
 
 static void levelRun(f32 deltaTime) {
-    u32 held = WPAD_ButtonsHeld(0);
-
     u32 pressed = WPAD_ButtonsDown(0);
     if (pressed & WPAD_BUTTON_A) {
         player.holding = true;
@@ -818,7 +816,7 @@ static void levelRender() {
     }
 
     for (; i < sortBuffer.size; i++) {
-        LevelObject* object = sortBuffer.objects[i];
+        const LevelObject* object = sortBuffer.objects[i];
 
         f32 x = 0.0f;
         f32 y = 0.0f;
@@ -871,7 +869,7 @@ static void levelRender() {
     guMtxTransApply(model, model, 0.0f, offset, 0.0f);
     offset = Font_RenderText(&font, &fontTexture, buf, 16.0f, ALIGN_LEFT, 600.0f, model);
 
-    snprintf(buf, 100, "Objects: %d/%d (%d/%d bytes)", sortBuffer.size, objectsSize, sortBuffer.capacity * sizeof(LevelObject), objectsSize * sizeof(LevelObject));
+    snprintf(buf, 100, "Objects: %d/%d (%u/%u bytes)", sortBuffer.size, objectsSize, sortBuffer.capacity * sizeof(LevelObject), objectsSize * sizeof(LevelObject));
     guMtxTransApply(model, model, 0.0f, offset, 0.0f);
     offset = Font_RenderText(&font, &fontTexture, buf, 16.0f, ALIGN_LEFT, 600.0f, model);
 

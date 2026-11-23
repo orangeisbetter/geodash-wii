@@ -5,7 +5,9 @@
 #include <math.h>
 #include <stdio.h>
 #include <gccore.h>
+#include <ogc/lwp_watchdog.h>
 
+#include "ogc/system.h"
 #include "prime.h"
 #include "../vendor/xml.h"
 #include "../parse/plist.h"
@@ -215,19 +217,28 @@ void openPlist(const char* files[], int arrSize) {
             exit(0);
         }
 
-        struct xml_document* document = xml_open_document(file);
-        struct xml_node* plist = xml_document_root(document);
-        struct xml_node* root = xml_node_child(plist, 0);
-        struct xml_node* frames = xml_node_child(root, 1);
+        fseek(file, 0, SEEK_END);
+        long length = ftell(file);
+        fseek(file, 0, SEEK_SET);
 
-        parseFrames(frames, table, i);
+        uint8_t* fileBuffer = malloc(length);
+        fread(fileBuffer, length, 1, file);
+
+        struct xml_document* document = xml_parse_document(fileBuffer, length);
 
         if (!document) {
             SYS_Report("Could not parse document\n");
             exit(0);
         }
 
-        xml_document_free(document, true);
+        struct xml_node* plist = xml_document_root(document);
+        struct xml_node* root = xml_node_child(plist, 0);
+        struct xml_node* frames = xml_node_child(root, 1);
+
+        parseFrames(frames, table, i);
+
+        xml_document_free(document, false);
+        free(fileBuffer);
     }
 
     int bytes = table->size * (sizeof(ht_item) + sizeof(ht_item*)) + getStringSize();
