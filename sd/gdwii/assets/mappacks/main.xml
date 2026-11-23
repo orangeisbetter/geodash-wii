@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?xml-model href="mappack.xsd"?>
+<!-- Levels in this file are referred to by their level ID. Be sure to also update ../level-info.xml with the additional
+metadata for the levels as well. -->
+<mappack name="_main">
+    <level>1</level>
+    <level>2</level>
+    <level>3</level>
+    <level>4</level>
+    <level>5</level>
+    <level>6</level>
+    <level>7</level>
+    <level>8</level>
+</mappack>

@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?xml-model href="level-info.xsd"?>
+<!-- Add more entries to this file for level metadata. -->
+<levels>
+    <level id="1">
+        <name>Stereo Madness</name>
+        <music>StereoMadness.mp3</music>
+    </level>
+    <level id="2">
+        <name>Back On Track</name>
+        <music>BackOnTrack.mp3</music>
+    </level>
+    <level id="3">
+        <name>Polargeist</name>
+        <music>Polargeist.mp3</music>
+    </level>
+    <level id="4">
+        <name>Dry Out</name>
+        <music>DryOut.mp3</music>
+    </level>
+    <level id="5">
+        <name>Base After Base</name>
+        <music>BaseAfterBase.mp3</music>
+    </level>
+    <level id="6">
+        <name>Can't Let Go</name>
+        <music>CantLetGo.mp3</music>
+    </level>
+    <level id="7">
+        <name>Jumper</name>
+        <music>Jumper.mp3</music>
+    </level>
+    <level id="8">
+        <name>Time Machine</name>
+        <music>TimeMachine.mp3</music>
+    </level>
+
+    <!-- GEOMETRY DASH WORLD -->
+    <level id="2001">
+        <name>Payload</name>
+        <music></music>
+    </level>
+    <level id="2002">
+        <name>Beast Mode</name>
+        <music></music>
+    </level>
+    <level id="2003">
+        <name>Machina</name>
+        <music></music>
+    </level>
+    <level id="2004">
+        <name>Years</name>
+        <music></music>
+    </level>
+    <level id="2005">
+        <name>Frontlines</name>
+        <music></music>
+    </level>
+    <level id="2006">
+        <name>Ground Zero</name>
+        <music></music>
+    </level>
+    <level id="2007">
+        <name>Striker</name>
+        <music></music>
+    </level>
+    <level id="2008">
+        <name>Embers</name>
+        <music></music>
+    </level>
+    <level id="2009">
+        <name>Round 1</name>
+        <music></music>
+    </level>
+    <level id="2010">
+        <name>Monster Dance Off</name>
+        <music></music>
+    </level>
+</levels>
