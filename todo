@@ -1,7 +1,7 @@
 [ ] fix canJump flag usage
 [ ] cube rotation
 [ ] level settings (default colors, etc)
-[ ] fading color triggers
+[X] fading color triggers
 [ ] Horizontal portals should not halve velocity (for some reason that's how it works, idk) also hitboxes
 [ ] particles and streaks
 [ ] proper death handling (play death sound, freeze for a few frames, then restart)

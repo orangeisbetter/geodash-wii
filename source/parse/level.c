@@ -230,69 +230,71 @@ LevelObject* GDL_ParseLevelString(char* levelString, int* size, ObjectData* data
         // SYS_Report("level data object: %s, %s\n", levelDataString, value);
         switch (val1){
             case 'A':
+                int ival = atoi(value);
+                f32 fval = atof(value);
                 switch (val2){
                     case 2:
-                        levelData->gamemode = atoi(value);
+                        levelData->gamemode = ival;
                     break;
                     case 3:
-                        levelData->minimode = atoi(value);
+                        levelData->minimode = ival;
                     break;
                     case 4:
-                        levelData->speed = atoi(value);
+                        levelData->speed = ival;
                     break;
                     case 5:
-                        levelData->obj2Blending = atoi(value);
+                        levelData->obj2Blending = ival;
                     break;
                     case 6:
-                        levelData->BGTexId = atoi(value);
+                        levelData->BGTexId = ival;
                     break;
                     case 7:
-                        levelData->groundTexId = atoi(value);
+                        levelData->groundTexId = ival;
                     break;
                     case 8:
-                        levelData->dualMode = atoi(value);
+                        levelData->dualMode = ival;
                     break;
                     case 9:
-                        levelData->startPosObj = atoi(value);
+                        levelData->startPosObj = ival;
                     break;
                     case 10:
-                        levelData->multiPlayerMode = atoi(value);
+                        levelData->multiPlayerMode = ival;
                     break;
                     case 11:
-                        levelData->flipGravity = atoi(value);
+                        levelData->flipGravity = ival;
                     break;
                     case 13:
-                        levelData->songOffset = atof(value);
+                        levelData->songOffset = fval;
                     break;
                     case 14:
                         // levelData.guideline = value
                     break;
                     case 15:
-                        levelData->fadeIn = atoi(value);
+                        levelData->fadeIn = ival;
                     break;
                     case 16:
-                        levelData->fadeOut = atoi(value);
+                        levelData->fadeOut = ival;
                     break;
                     case 17:
-                        levelData->groundLineId = atoi(value);
+                        levelData->groundLineId = ival;
                     break;
                     case 18:
-                        levelData->font = atoi(value);
+                        levelData->font = ival;
                     break;
                     case 20:
-                        levelData->reverseMode = atoi(value);
+                        levelData->reverseMode = ival;
                     break;
                     case 22:
-                        levelData->platformerMode = atoi(value);
+                        levelData->platformerMode = ival;
                     break;
                     case 25:
-                        levelData->middlegroundTexId = atoi(value);
+                        levelData->middlegroundTexId = ival;
                     break;
                     case 28:
-                        levelData->mirrorMode = atoi(value);
+                        levelData->mirrorMode = ival;
                     break;
                     case 29:
-                        levelData->rotateGameplay = atoi(value);
+                        levelData->rotateGameplay = ival;
                     break;
                 }
             break;
@@ -465,6 +467,7 @@ LevelObject* GDL_ParseLevelString(char* levelString, int* size, ObjectData* data
         }
 
         if (last) {
+            
             // const char* texturename = object.id < 100 ? objectTextures[object.id] : NULL;
             // SYS_Report("Object: ID: %4d, x: %7.1f, y: %7.1f, texture name: %s.png\n", object.id, object.x, object.y, texturename);
 
@@ -480,6 +483,11 @@ LevelObject* GDL_ParseLevelString(char* levelString, int* size, ObjectData* data
 
             objects[objectsSize] = object;
             objectsSize++;
+
+            if(isPortalId(object.id)){
+                //SYS_Report("there is a portal here!\n");
+                
+            }
 
             object = defaultObject;
         }
