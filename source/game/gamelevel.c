@@ -142,6 +142,45 @@ bool intersectsRect(Rect* a, Rect* b) {
             a->y + a->height >= b->y);
 }
 
+//calculate the object hitbox when object is rotated / flipped
+void getObjectRect(const LevelObject* object, const Hitbox* hb, Rect* rect){
+    static guVector front = { 0.0f, 0.0f, -1.0f };
+
+    // Same flip and rotation as RDR_drawLevelObject (without the screen mirror)
+    Mtx transform;
+    Mtx temp;
+    guMtxScale(transform, object->flipx ? -1.0f : 1.0f, object->flipy ? -1.0f : 1.0f, 1.0f);
+    guMtxRotAxisDeg(temp, &front, object->rotation);
+    guMtxConcat(temp, transform, transform);
+
+    f32 halfW = hb->width / 2.0f;
+    f32 halfH = hb->height / 2.0f;
+
+    guVector corners[4] = {
+        { hb->x - halfW, hb->y - halfH, 0.0f },
+        { hb->x + halfW, hb->y - halfH, 0.0f },
+        { hb->x + halfW, hb->y + halfH, 0.0f },
+        { hb->x - halfW, hb->y + halfH, 0.0f }
+    };
+
+    // Bounding box of the transformed corners (exact for multiples of 90 degrees)
+    f32 minX = 0.0f, maxX = 0.0f, minY = 0.0f, maxY = 0.0f;
+    for (int i = 0; i < 4; i++) {
+        guVector point;
+        guVecMultiply(transform, &corners[i], &point);
+
+        if (i == 0 || point.x < minX) minX = point.x;
+        if (i == 0 || point.x > maxX) maxX = point.x;
+        if (i == 0 || point.y < minY) minY = point.y;
+        if (i == 0 || point.y > maxY) maxY = point.y;
+    }
+
+    rect->x = object->x + minX;
+    rect->y = object->y + minY;
+    rect->width = maxX - minX;
+    rect->height = maxY - minY;
+}
+
 int getCollisionType(const LevelObject* object) {
     switch (object->id) {
         case 8:
@@ -287,16 +326,7 @@ void checkCollisions(Player* player, float dt) {
             continue;
         }
 
-        Hitbox* hb = &objectDefaults[object->id].hitbox;
-
-        Rect objectRect = {
-            object->x + hb->x - hb->width / 2,
-            object->y + hb->y - hb->height / 2,
-            hb->width,
-            hb->height
-        };
-
-        if (intersectsRect(&playerRect, &objectRect)) {
+        if (intersectsRect(&playerRect, &object->hitbox)) {
             switch (getCollisionType(object)) {
                 case PORTAL:
                     switch (object->id) {
@@ -337,16 +367,7 @@ void checkCollisions(Player* player, float dt) {
     for (int i = 0; i < hazardsCount; i++) {
         LevelObject* hazard = hazards[i];
 
-        Hitbox* hb = &objectDefaults[hazard->id].hitbox;
-
-        Rect hazardRect = {
-            hazard->x + hb->x - hb->width / 2,
-            hazard->y + hb->y - hb->height / 2,
-            hb->width,
-            hb->height
-        };
-
-        if (intersectsRect(&playerRect, &hazardRect)) {
+        if (intersectsRect(&playerRect, &hazard->hitbox)) {
             playerDestroy(player);
         }
     }
@@ -369,6 +390,12 @@ void* loadThreadHandler(void* data) {
     if (!objects) {
         currentLevel = NULL;
         return NULL;
+    }
+
+    //setup object hitboxes
+    for (int i = 0; i < objectsSize; i++) {
+        LevelObject* object = &objects[i];
+        getObjectRect(object, &objectDefaults[object->id].hitbox, &object->hitbox);
     }
 
     free(levelString);
@@ -642,7 +669,7 @@ static void levelRun(f32 deltaTime) {
 }
 
 void figureOutPortalOffset(LevelObject* portalObject){
-    SYS_Report("portal rotation of id %d: %f\n", portalObject->id, portalObject->rotation);
+    //SYS_Report("portal rotation of id %d: %f\n", portalObject->id, portalObject->rotation);
 
     f32 defaultOffset = 1.0f;
     switch(portalObject->id){
@@ -711,45 +738,6 @@ static void levelRender() {
         }
 
         sortBuffer.objects[sortBuffer.size++] = object;
-
-        /*
-        // portals
-        char* portalString;
-        if ((portalString = isPortalId(object->id))) {
-            texture_info* tex = ht_search(portalString);
-            if (tex == NULL) {
-                SYS_Report("Can't find portal texture %d\n", object->id);
-                continue;
-            }
-
-            RenderObject* renderObject = RDR_RenderCacheAdd(&renderCache);
-            if (!renderObject) {
-                SYS_Report(__FILE__ ": Cannot create render object!!!\n");
-            }
-
-            renderObject->x = object->x;
-            renderObject->y = object->y - 2;
-            renderObject->rotation = object->rotation;
-            renderObject->flipx = object->flipx;
-            renderObject->flipy = object->flipy;
-            renderObject->z_layer = 4;
-            renderObject->z_order = object->z_order;
-            renderObject->z = 0;
-            renderObject->tex = tex;
-
-            switch (objectData->color_type) {
-                case COLOR_TYPE_BASE:
-                    renderObject->color = getColorChannel(baseColorChannel);
-                    break;
-                case COLOR_TYPE_DETAIL:
-                    renderObject->color = getColorChannel(detailColorChannel);
-                    break;
-                case COLOR_TYPE_BLACK:
-                    renderObject->color.color = 0x000000ff;
-                    renderObject->color.blending = false;
-            }
-        }
-        */
     }
 
     // sort object cache (for z order)
@@ -786,6 +774,7 @@ static void levelRender() {
     for (; i < sortBuffer.size; i++) {
         const LevelObject* object = sortBuffer.objects[i];
         if (object->z_layer > 4) {
+            //if the object is drawn infront of the player, then go through this list and find objects linked with objects that should be drawn behind the player. namely portals.
             char* portalTexture = isPortalId(object->id);
             if(portalTexture == NULL){
                 continue;
@@ -822,6 +811,7 @@ static void levelRender() {
         if(object->z_layer <= 4){
             RDR_drawLevelObject(object, &objectDefaults[object->id], mirrored, alpha, model, view);
         }else{
+            //portals
             LevelObject notObject;
             notObject = *object;
             figureOutPortalOffset(&notObject);         
@@ -837,7 +827,7 @@ static void levelRender() {
             RDR_drawLevelObject(&notObject, &notObjectDefaults, mirrored, alpha, model, view);
         }
     }
-    i = itoreturnto;
+    i = itoreturnto;//return back to where i should be
   
     SpriteInfo playerSprite = {
         .x = camX + (player.x - camX) * mirrorScale,

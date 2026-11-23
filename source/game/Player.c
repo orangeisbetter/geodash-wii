@@ -94,14 +94,7 @@ void playerCollideWithObject(Player* player, LevelObject* object, ObjectData* cl
     Rect playerRect;
     playerGetRect(player, &playerRect);
 
-    Hitbox* hb = &class->hitbox;
-
-    Rect objectRect = {
-        object->x + hb->x - hb->width / 2.0f,
-        object->y + hb->y - hb->height / 2.0f,
-        hb->width,
-        hb->height
-    };
+    Rect objectRect = object->hitbox;
 
     float tolerance = 10.0f;
 

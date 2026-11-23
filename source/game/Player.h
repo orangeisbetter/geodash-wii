@@ -28,13 +28,6 @@ typedef struct {
     Gamemode gamemode;
 } Player;
 
-typedef struct {
-    float x;
-    float y;
-    float width;
-    float height;
-} Rect;
-
 Player* playerInit(Player* player);
 bool playerIsFalling(Player* player);
 void playerHitGround(Player* player, bool reverseGravity);
