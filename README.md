@@ -80,6 +80,8 @@ This project uses DevKitPro and libogc for building. Be sure to install these be
 
 - `ppc-zlib`
 
+cJSON is vendored in `source/vendor` and built as part of the project; no devkitPro portlib package is needed for it.
+
 With all the game textures placed in the `textures` directory, type `make` and everything should be built. The game should be output as a `boot.dol` file in the project root.
 
 ## Important Note
