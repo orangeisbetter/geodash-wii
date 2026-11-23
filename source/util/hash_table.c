@@ -227,7 +227,7 @@ void openPlist(const char* files[], int arrSize) {
         struct xml_document* document = xml_parse_document(fileBuffer, length);
 
         if (!document) {
-            SYS_Report("Could not parse document\n");
+            SYS_Report("Could not parse document %s\n", files[i]);
             exit(0);
         }
 
