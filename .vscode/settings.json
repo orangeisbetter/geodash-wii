@@ -42,5 +42,10 @@
         "tuple": "c",
         "utility": "c",
         "variant": "c"
-    }
+    },
+    "clangd.arguments": [
+        "--compile-commands-dir=${workspaceFolder}",
+        "--query-driver=/opt/devkitpro/devkitPPC/bin/powerpc-eabi-gcc"
+    ],
+    "files.eol": "\n"
 }

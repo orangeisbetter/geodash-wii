@@ -486,7 +486,6 @@ LevelObject* GDL_ParseLevelString(char* levelString, int* size, ObjectData* data
 
             if(isPortalId(object.id)){
                 //SYS_Report("there is a portal here!\n");
-                
             }
 
             object = defaultObject;

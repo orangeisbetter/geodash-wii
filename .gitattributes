@@ -1,0 +1,8 @@
+* text=auto eol=lf
+*.db binary
+*.bmp binary
+*.tpl binary
+*.png binary
+*.mp3 binary
+*.dol binary
+*.elf binary

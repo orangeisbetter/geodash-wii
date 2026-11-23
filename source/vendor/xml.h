@@ -20,8 +20,14 @@
  *
  *  3. This notice may not be removed or altered from any source distribution.
  */
+
+/*
+ * NOTICE: THIS CODE HAS BEEN MODIFIED FROM IT'S SOURCE AND IS NOT THE ORIGINAL SOFTWARE.
+ */
+
 #ifndef HEADER_XML
 #define HEADER_XML
+
 
 /**
  * Includes
@@ -47,6 +53,8 @@ struct xml_attribute;
  */
 struct xml_string;
 
+
+
 /**
  * Tries to parse the XML fragment in buffer
  *
@@ -62,6 +70,8 @@ struct xml_string;
  */
 struct xml_document* xml_parse_document(uint8_t* buffer, size_t length);
 
+
+
 /**
  * Tries to read an XML document from disk
  *
@@ -74,6 +84,8 @@ struct xml_document* xml_parse_document(uint8_t* buffer, size_t length);
  */
 struct xml_document* xml_open_document(FILE* source);
 
+
+
 /**
  * Frees all resources associated with the document. All xml_node and xml_string
  * references obtained through the document will be invalidated
@@ -84,45 +96,62 @@ struct xml_document* xml_open_document(FILE* source);
  */
 void xml_document_free(struct xml_document* document, bool free_buffer);
 
+
 /**
  * @return xml_node representing the document root
  */
 struct xml_node* xml_document_root(struct xml_document* document);
+
+
 
 /**
  * @return The xml_node's tag name
  */
 struct xml_string* xml_node_name(struct xml_node* node);
 
+
+
 /**
  * @return The xml_node's string content (if available, otherwise NULL)
  */
 struct xml_string* xml_node_content(struct xml_node* node);
+
+
 
 /**
  * @return Number of child nodes
  */
 size_t xml_node_children(struct xml_node* node);
 
+
+
 /**
  * @return The n-th child or 0 if out of range
  */
 struct xml_node* xml_node_child(struct xml_node* node, size_t child);
+
+
 
 /**
  * @return Number of attribute nodes
  */
 size_t xml_node_attributes(struct xml_node* node);
 
+
+
 /**
  * @return the n-th attribute name or 0 if out of range
  */
 struct xml_string* xml_node_attribute_name(struct xml_node* node, size_t attribute);
 
+
+
 /**
  * @return the n-th attribute content or 0 if out of range
  */
 struct xml_string* xml_node_attribute_content(struct xml_node* node, size_t attribute);
+
+
 
 /**
  * @return The node described by the path or 0 if child cannot be found
@@ -131,11 +160,15 @@ struct xml_string* xml_node_attribute_content(struct xml_node* node, size_t attr
  */
 struct xml_node* xml_easy_child(struct xml_node* node, uint8_t const* child, ...);
 
+
+
 /**
  * @return 0-terminated copy of node name
  * @warning User must free the result
  */
 uint8_t* xml_easy_name(struct xml_node* node);
+
+
 
 /**
  * @return 0-terminated copy of node content
@@ -143,10 +176,14 @@ uint8_t* xml_easy_name(struct xml_node* node);
  */
 uint8_t* xml_easy_content(struct xml_node* node);
 
+
+
 /**
  * @return Length of the string
  */
 size_t xml_string_length(struct xml_string* string);
+
+
 
 /**
  * Copies the string into the supplied buffer

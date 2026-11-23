@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?xml-model href="mappack.xsd"?>
+<mappack name="world">
+    <level>2001</level>
+    <level>2002</level>
+    <level>2003</level>
+    <level>2004</level>
+    <level>2005</level>
+    <level>2006</level>
+    <level>2007</level>
+    <level>2008</level>
+    <level>2009</level>
+    <level>2010</level>
+</mappack>
