@@ -251,9 +251,11 @@ void RDR_drawSpriteFromMap2(texture_info* tex, SpriteInfo* sprite, u32 color, bo
     f32 dh = tex->spriteSize.y * sprite->scale;
 
     // TODO: Use this offset pweese
-    f32 offsetx = tex->spriteOffset.x;
-    f32 offsety = tex->spriteOffset.y;
-
+    //f32 offsetx = tex->spriteOffset.x;
+    //f32 offsety = tex->spriteOffset.y;
+    f32 offsetx = tex->spriteOffset.x * sprite->scale;
+    f32 offsety = tex->spriteOffset.y * sprite->scale;
+    
     f32 sizex = tex->textureRotated ? tex->textureRect.size.y : tex->textureRect.size.x;
     f32 sizey = tex->textureRotated ? tex->textureRect.size.x : tex->textureRect.size.y;
     
@@ -278,7 +280,8 @@ void RDR_drawSpriteFromMap2(texture_info* tex, SpriteInfo* sprite, u32 color, bo
 
     Mtx model, modelView;
     guMtxRotAxisDeg(model, &forward, sprite->rotation);
-    guMtxApplyTrans(model, model, tex->spriteOffset.x, tex->spriteOffset.y, 0.0f);
+    //guMtxApplyTrans(model, model, tex->spriteOffset.x, tex->spriteOffset.y, 0.0f);
+    guMtxApplyTrans(model, model, offsetx, offsety, 0.0f);
     guMtxTransApply(model, model, dx, dy, 0.0f);
     guMtxConcat(view, model, modelView);
 

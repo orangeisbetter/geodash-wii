@@ -556,6 +556,7 @@ void levelInit(){
     mirrored = levelData.mirrorMode;
     mirrorProgress = levelData.mirrorMode ? 1.0f : 0.0f;
     flipGravity(&player, levelData.flipGravity, false);
+    playerChangeToMiniMode(&player, levelData.minimode);
     for (int i = 0; i < objectsSize; i++) {
         objects[i].activated = false;
     }

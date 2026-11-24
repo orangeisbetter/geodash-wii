@@ -8,7 +8,7 @@ static const float ballSwitchVel = -1.5f;     // Push towards the new floor when
 static const float ballMaxVel = 20.0f;        // Above anything reachable in an 8 block corridor
 static const float miniModeJumpScale = 0.8f;
 static const float playerSize = 30.0f;
-static bool miniMode = false;
+static const float cubeJumpVel = 11.180032f;
 
 bool intersectsRect(Rect* a, Rect* b);
 void playerDestroy(Player* player);
@@ -21,11 +21,12 @@ Player* playerInit(Player* player) {
     player->velY = 0.0f;
     player->rotation = 0.0f;
     player->gravity = 0.958199f;
-    player->jumpVel = 11.180032f;
+    player->jumpVel = cubeJumpVel;
     player->groundBottom = 0.0f;
     player->groundTop = 300.0f;
     player->gravityModifier = 1.0f;
     player->gravityFlipped = false;
+    player->miniMode = false;
     player->restrictedZone = false;
     player->grounded = false;
     player->canJump = false;
@@ -34,7 +35,6 @@ Player* playerInit(Player* player) {
     player->queuedHold = false;
     player->dead = false;
     player->gamemode = GAMEMODE_CUBE;
-    miniMode = false;
     return player;
 }
 
@@ -81,15 +81,17 @@ void playerChangeGamemode(Player* player, Gamemode gamemode) {
 
 void playerChangeToMiniMode(Player* player, bool mini){
     if(mini){
-        miniMode = true;
+        player->miniMode = true;
         player->scale = 0.5f;
-        player->jumpVel = 11.180032f * miniModeJumpScale;
+        player->jumpVel = cubeJumpVel * miniModeJumpScale;
     }else{
-        miniMode = false;
+        player->miniMode = false;
         player->scale = 1.0f;
-        player->jumpVel = 11.180032f;
+        player->jumpVel = cubeJumpVel;
     }
-    playerChangeGamemode(player, player->gamemode);
+    player->velY = player->velY / 2.0f;
+    player->grounded = false;
+    player->canJump = false;
 }
 
 void flipGravity(Player* player, bool flipped, bool isPortal) {
@@ -115,7 +117,7 @@ static float playerBumpScale(Player* player, bool isOrb) {
             totalMultiplier = isOrb ? ballOrbScale : ballPadScale;
         break;
     }
-    if(miniMode){
+    if(player->miniMode){
         totalMultiplier *= miniModeJumpScale;
     }
     return totalMultiplier;

@@ -19,6 +19,7 @@ typedef struct {
     float groundTop;        // Top of restricted zone
     float gravityModifier;  // 1 for normal gravity, -1 for flipped gravity
     bool gravityFlipped;
+    bool miniMode;
     bool restrictedZone;
     bool grounded;
     bool canJump;
