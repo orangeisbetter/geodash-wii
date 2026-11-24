@@ -155,7 +155,8 @@ void playerCollideWithObject(Player* player, LevelObject* object, ObjectData* cl
 
     Rect objectRect = object->hitbox;
 
-    float tolerance = 10.0f;
+    //tolerance scaled for miniMode
+    float tolerance = 10.0f * player->scale;
 
     float halfH = playerRect.height / 2.0f;
 
