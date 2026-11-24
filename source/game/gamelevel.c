@@ -96,6 +96,9 @@ static bool mirrored = false;
 static const f32 playerSpeeds[] = { 311.58f / 54, 251.16f / 54, 387.42f / 54, 468.0f / 54, 576.0f / 54 };
 static const f32 baseSpeed = 5.770002f;
 
+// Ball spin in degrees per unit travelled (measured from the original game)
+static const f32 ballSpinPerUnit = 1.85f;
+
 static const f32 velCubeJump = 1.94f;
 static const f32 velYellowPad = 2.77f;
 static const f32 velPinkPad = 1.79f;
@@ -244,10 +247,20 @@ int getCollisionType(const LevelObject* object) {
         case 11: // yellow
         case 12: // cube
         case 13: // ship
-        case 45:
-        case 46:
-        case 47:
-        case 99:
+        case 45: // mirror activate
+        case 46: // mirror deactivate
+        case 47: // ball
+        case 99: // changes size deactivate
+        case 101: // changes size activate
+        case 111: // UFO
+        case 286: // dual activate
+        case 287: // dual deactivate
+        case 660: // wave
+        case 745: // robot
+        case 747: // teleport activate
+        case 749: // teleport deactivate
+        case 1331: // spider
+        //one more for swing, #18 is in plist but not objects.json
             return PORTAL;
         case 36: // yellow
         case 84: // blue
@@ -276,25 +289,23 @@ static bool objectIsUpsideDown(const LevelObject* object) {
     return object->flipy != rotated;
 }
 
-void flipGravity(Player* player, bool flipped, bool isPortal) {
-    if (player->gravityFlipped == flipped) {
-        return;
-    }
-
-    player->gravityFlipped = flipped;
-    player->gravityModifier *= -1.0f;
-    if(isPortal){
-        player->velY /= 2.0f;
-    }
-}
-
 void flipScreen(bool state) {
     screenFlipped = state;
 }
 
+static void setGroundBounds(Player* player, f32 portalY, f32 height) {
+    // Corridor centred on the portal, snapped to whole blocks, never below the real ground
+    f32 bottom = floorf((portalY - height / 2.0f) / 30.0f) * 30.0f;
+    if (bottom < 0.0f) {
+        bottom = 0.0f;
+    }
+    player->groundBottom = bottom;
+    player->groundTop = bottom + height;
+}
+
 void checkCollisions(Player* player, float dt) {
     // Check collision with ground
-    if (player->y < 15 && player->gamemode != GAMEMODE_SHIP) {
+    if (player->y < 15 && player->gamemode != GAMEMODE_SHIP && player->gamemode != GAMEMODE_BALL) {
         if (player->gravityFlipped) {
             playerDestroy(player);
             return;
@@ -313,6 +324,22 @@ void checkCollisions(Player* player, float dt) {
         } else if (player->y < player->groundBottom + 15.0f) {
             player->y = player->groundBottom + 15.0f;
             playerHitGround(player, player->gravityFlipped);
+        }
+    }else if (player->gamemode == GAMEMODE_BALL) {
+        if (player->y > player->groundTop - 15.0f) {
+            player->y = player->groundTop - 15.0f;
+            if (player->gravityFlipped) {
+                playerHitGround(player, false);
+            } else if (player->velY > 0.0f) {
+                player->velY = 0.0f;
+            }
+        } else if (player->y < player->groundBottom + 15.0f) {
+            player->y = player->groundBottom + 15.0f;
+            if (!player->gravityFlipped) {
+                playerHitGround(player, false);
+            } else if (player->velY < 0.0f) {
+                player->velY = 0.0f;
+            }
         }
     }
 
@@ -364,10 +391,11 @@ void checkCollisions(Player* player, float dt) {
                             flipGravity(player, true, true);
                             break;
                         case 12:
-                            player->gamemode = GAMEMODE_CUBE;
+                            playerChangeGamemode(player, GAMEMODE_CUBE);
                             break;
                         case 13:
-                            player->gamemode = GAMEMODE_SHIP;
+                            playerChangeGamemode(player, GAMEMODE_SHIP);
+                            setGroundBounds(player, object->y, 300.0f);
                             break;
                         case 45:
                             flipScreen(true);
@@ -375,6 +403,15 @@ void checkCollisions(Player* player, float dt) {
                         case 46:
                             flipScreen(false);
                             break;
+                        case 47:
+                            playerChangeGamemode(player, GAMEMODE_BALL);
+                            setGroundBounds(player, object->y, 240.0f);
+                            break;
+                        case 99:
+
+                        break;
+                        case 101:
+                        break;
                     }
                     player->canJump = false;
                     break;
@@ -679,6 +716,11 @@ static void levelRun(f32 deltaTime) {
         case GAMEMODE_SHIP:
             player.rotation = -atan2(player.velY, player.velX) * (180.0f / M_PI);
             break;
+
+        case GAMEMODE_BALL:
+            // velX * 0.9 units per physics frame, 60 frames per second
+            player.rotation += ballSpinPerUnit * player.velX * 0.9f * 60.0f * deltaTime * player.gravityModifier;
+        break;
     }
 
     camX = player.x + 2.5f * 30.0f;
@@ -836,8 +878,13 @@ static void levelRender() {
 
     // Background and ground are special, they don't use the camera view matrix. IT'S ALL AN ILLUSION
     RDR_drawBackground(&backgroundTexture, backgroundPosition, camY, 0.45f, getColorChannel(1000).color);
-    RDR_drawGround(&groundTexture, backgroundPosition, camY, viewScale, getColorChannel(1001).color);
+    bool hasCeiling = player.gamemode == GAMEMODE_SHIP || player.gamemode == GAMEMODE_BALL;
+    f32 floorY = hasCeiling ? player.groundBottom : 0.0f;
 
+    RDR_drawGround(&groundTexture, backgroundPosition, camY - floorY, viewScale, getColorChannel(1001).color, false);
+    if (hasCeiling) {
+        RDR_drawGround(&groundTexture, backgroundPosition, camY - player.groundTop, viewScale, getColorChannel(1001).color, true);
+    }
     // Set up camera view matrix
     guMtxTrans(view, -camX, -camY, -10.0f);
     guMtxScaleApply(view, view, viewScale, viewScale, 1.0f);
@@ -930,6 +977,9 @@ static void levelRender() {
             RDR_drawSpriteFromMap(ht_search("ship_01_001.png"), &playerSprite, 1011, view);
             RDR_drawSpriteFromMap(ht_search("ship_01_2_001.png"), &playerSprite, 1012, view);
             break;
+        case GAMEMODE_BALL:
+            RDR_drawSpriteFromMap(ht_search("player_ball_00_001.png"), &playerSprite, 1011, view);
+            RDR_drawSpriteFromMap(ht_search("player_ball_00_2_001.png"), &playerSprite, 1012, view);
     }
 
     for (; i < sortBuffer.size; i++) {
@@ -964,8 +1014,10 @@ static void levelRender() {
     }
 
     // Draw line (VERY IMPORTANT)
-    RDR_drawLine(view, camY, viewScale);
-
+    RDR_drawLine(view, camY - floorY, viewScale);
+    if (hasCeiling) {
+        RDR_drawLine(view, camY - player.groundTop, viewScale);
+    }
     GFX_ResetDrawMode();
 
     // --------------------------------------------------------------------

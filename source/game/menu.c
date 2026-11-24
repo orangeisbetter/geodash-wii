@@ -125,7 +125,7 @@ static void menuRender() {
     guMtxIdentity(view);
 
     RDR_drawMenuBackground(camX, camY, 0.49f, backgroundColor.startColor, backgroundColor.endColor);
-    RDR_drawGround(&groundTexture, camX, camY, viewScale, backgroundColor.startColor);
+    RDR_drawGround(&groundTexture, camX, camY, viewScale, backgroundColor.startColor, false);
     RDR_drawLine(view, camY, viewScale);
 
     GFX_ResetDrawMode();

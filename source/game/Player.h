@@ -34,6 +34,7 @@ void playerHitGround(Player* player, bool reverseGravity);
 void playerDestroy(Player* player);
 void playerGetRect(Player* player, Rect* rect);
 void playerChangeGamemode(Player* player, Gamemode gamemode);
+void flipGravity(Player* player, bool flipped, bool isPortal);
 void playerPadJump(Player* player, float velocity);
 void playerRingJump(Player* player, float strength, LevelObject* object);
 void playerCollideWithObject(Player* player, LevelObject* object, ObjectData* class);

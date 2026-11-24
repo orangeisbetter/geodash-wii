@@ -2,6 +2,11 @@
 
 #include "gamelevel.h"
 
+// Ball physics, measured from the original game (1x speed)
+static const float ballGravityScale = 0.6f;   // Ball gravity relative to the cube
+static const float ballSwitchVel = -1.5f;     // Push towards the new floor when switching
+static const float ballMaxVel = 20.0f;        // Above anything reachable in an 8 block corridor
+
 bool intersectsRect(Rect* a, Rect* b);
 void playerDestroy(Player* player);
 
@@ -69,8 +74,33 @@ void playerChangeGamemode(Player* player, Gamemode gamemode) {
     }
 }
 
+void flipGravity(Player* player, bool flipped, bool isPortal) {
+    if (player->gravityFlipped == flipped) {
+        return;
+    }
+
+    player->gravityFlipped = flipped;
+    player->gravityModifier *= -1.0f;
+    if(isPortal){
+        player->velY /= 2.0f;
+    }
+}
+
+// Pad and orb strength in ball mode relative to the cube (measured from the original game)
+static const float ballPadScale = 0.6f;
+static const float ballOrbScale = 0.7f;
+
+static float playerBumpScale(Player* player, bool isOrb) {
+    switch (player->gamemode) {
+        case GAMEMODE_BALL:
+            return isOrb ? ballOrbScale : ballPadScale;
+        default:
+            return 1.0f;
+    }
+}
+
 void playerPadJump(Player* player, float velocity) {
-    player->velY = velocity * player->gravityModifier;
+    player->velY = velocity * playerBumpScale(player, false) * player->gravityModifier;
     player->grounded = false;
 }
 
@@ -78,7 +108,7 @@ void playerRingJump(Player* player, float velocity, LevelObject* object) {
     if (player->queuedHold) {
         player->queuedHold = false;
 
-        player->velY = velocity * player->gravityModifier;
+        player->velY = velocity * playerBumpScale(player, true) * player->gravityModifier;
         player->grounded = false;
         object->activated = true;
     }
@@ -211,7 +241,28 @@ static void playerUpdateJump(Player* player, float dt) {
             }
         } break;
         case GAMEMODE_BALL:
-            break;
+            // Switch gravity only while touching the ground (or ceiling, when flipped)
+            if (player->queuedHold && player->canJump) {
+                player->queuedHold = false;
+                player->grounded = false;
+
+                flipGravity(player, !player->gravityFlipped, false);
+                player->velY = ballSwitchVel * player->gravityModifier;
+            }
+            player->canJump = false;
+
+            player->velY -= player->gravity * ballGravityScale * player->gravityModifier * dt;
+
+            if (player->gravityFlipped) {
+                if (player->velY > ballMaxVel) {
+                    player->velY = ballMaxVel;
+                }
+            } else {
+                if (player->velY < -ballMaxVel) {
+                    player->velY = -ballMaxVel;
+                }
+            }
+        break;
     }
 }
 

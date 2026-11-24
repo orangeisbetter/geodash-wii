@@ -133,7 +133,7 @@ static void renderHomeScreen() {
     guMtxIdentity(view);
     
     RDR_drawBackground(&backgroundTexture, camX, camY, 0.45f, getColorChannel(1000).color);
-    RDR_drawGround(&groundTexture, camX, camY, viewScale, getColorChannel(1001).color);
+    RDR_drawGround(&groundTexture, camX, camY, viewScale, getColorChannel(1001).color, false);
     // Draw line (VERY IMPORTANT)
     RDR_drawLine(view, camY, viewScale);
     GFX_ResetDrawMode();

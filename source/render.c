@@ -88,7 +88,7 @@ void RDR_drawBackground(GXTexObj* background, f32 x, f32 y, f32 scale, u32 color
     GX_End();
 }
 
-void RDR_drawGround(GXTexObj* ground, f32 x, f32 y, f32 viewScale, u32 color) {
+void RDR_drawGround(GXTexObj* ground, f32 x, f32 y, f32 viewScale, u32 color, bool ceiling) {
     x = -x;
     // x *= viewScale;
     y = -y;
@@ -112,11 +112,14 @@ void RDR_drawGround(GXTexObj* ground, f32 x, f32 y, f32 viewScale, u32 color) {
 
     GX_Begin(GX_QUADS, GX_VTXFMT0, 4);
 
+    // Ceilings extend upwards from their edge, floors downwards
+    f32 far = ceiling ? y + 128.0f * viewScale : y - 128.0f * viewScale;
+
     GFX_Plot(-w2, y, 0.0f, -texXOffset, 0.0f, color);
     GFX_Plot(w2, y, 0.0f, -texXOffset + texw, 0.0f, color);
-    GFX_Plot(w2, y - 128.0f * viewScale, 0.0f, -texXOffset + texw, 1.0f, color);
-    GFX_Plot(-w2, y - 128.0f * viewScale, 0.0f, -texXOffset, 1.0f, color);
-
+    GFX_Plot(w2, far, 0.0f, -texXOffset + texw, 1.0f, color);
+    GFX_Plot(-w2, far, 0.0f, -texXOffset, 1.0f, color);
+    
     GX_End();
 }
 
