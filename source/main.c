@@ -170,7 +170,7 @@ int main(int argc, char** argv) {
 
     start = gettime();
 
-    objectDefaults = getObjectData(ASSETS_PATH "object.json");
+    objectDefaults = getObjectData(ASSETS_PATH "object.json", &objectDefaultsLength);
 
     SYS_Report("Loaded object definitions. (%f ms)\n", ticks_to_microsecs(gettime() - start) / 1000.0f);
 

@@ -218,17 +218,52 @@ Color parseColor(char* colorString) {
             case 3:
                 color.color |= (u8) atoi(value) << 8;
                 break;
-            // TODO: Who knows what keys 4 and 5 are??? They're def not this...
-            // case 4:
-            //     color.color |= (u8) atoi(value);
-            //     break;
-            // case 5:
-            //     color.blending = atoi(value) == 1;
-            //     break;
+            case 5:
+                color.blending = atoi(value) == 1;
+                break;
         }
     }
 
     return color;
+}
+
+static void processColorString(ColorConfig* config, char* colorString) {
+    for (char* subString = strtok(colorString, "|"); subString && subString[0]; subString = strtok(NULL, "|")) {
+        Color color;
+        int colorChannel = -1;
+
+        for (char* key = strtok(colorString, "_"); key && key[0]; key = strtok(NULL, "_")) {
+            int intKey = atoi(key);
+            char* value = strtok(NULL, "_");
+            // should always be key-value pairs
+            assert(value && value[0]);
+
+            switch (intKey) {
+                case 1:
+                    color.color |= (u8) atoi(value) << 24;
+                    break;
+                case 2:
+                    color.color |= (u8) atoi(value) << 16;
+                    break;
+                case 3:
+                    color.color |= (u8) atoi(value) << 8;
+                    break;
+                case 5:
+                    color.blending = atoi(value) == 1;
+                    break;
+                case 6:
+                    colorChannel = atoi(value);
+                    break;
+                default:
+                    SYS_Report("Warning: Unhandled color string key %d\n", intKey);
+                    break;
+            }
+        }
+
+        assert(colorChannel != -1);
+
+        colorConfigPush(config, colorChannel, color);
+    }
 }
 
 void parseLevelData(char* levelString, char** levelStringPtr, LevelData* levelData) {
@@ -346,6 +381,9 @@ void parseLevelData(char* levelString, char** levelStringPtr, LevelData* levelDa
                         break;
                     case 37:
                         colorConfigPush(&levelData->colorConfig, 1003, parseColor(value));
+                        break;
+                    case 38:
+                        processColorString(&levelData->colorConfig, value);
                         break;
                     default:
                         SYS_Report("Warning: Unhandled level data key %s\n", key);
@@ -467,7 +505,7 @@ LevelObject* GDL_ParseLevelString(char* levelString, int* size, ObjectData* data
                     object.is_trigger = ival;
                     break;
                 default:
-                    SYS_Report("Unknown key %d\n", key);
+                    // SYS_Report("Unknown key %d\n", key);
                     break;
             }
         }

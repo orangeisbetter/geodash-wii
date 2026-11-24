@@ -8,6 +8,7 @@
 extern const GameState GAMESTATE_LEVEL;
 
 extern ObjectData* objectDefaults;
+extern unsigned int objectDefaultsLength;
 
 int loadLevel(int levelId);
 void levelRestart();

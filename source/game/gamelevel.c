@@ -70,6 +70,7 @@ typedef enum {
 } CollisionType;
 
 ObjectData* objectDefaults = NULL;
+unsigned int objectDefaultsLength = 0;
 
 static s32 my_reader(void* cb_data, void* dst, s32 len) {
     FILE* f = (FILE*)cb_data;
@@ -762,6 +763,12 @@ static void levelRender() {
     int i = 0;
     for (; i < sortBuffer.size; i++) {
         const LevelObject* object = sortBuffer.objects[i];
+
+        if (object->id >= objectDefaultsLength) {
+            // unknown object. Skip
+            continue;
+        }
+
         if (object->z_layer > 4) {
             break;
         }
@@ -817,6 +824,11 @@ static void levelRender() {
 
     for (; i < sortBuffer.size; i++) {
         const LevelObject* object = sortBuffer.objects[i];
+
+        if (object->id >= objectDefaultsLength) {
+            // unknown object. Skip
+            continue;
+        }
 
         f32 x = 0.0f;
         f32 y = 0.0f;
