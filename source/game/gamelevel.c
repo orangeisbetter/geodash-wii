@@ -289,6 +289,12 @@ static bool objectIsUpsideDown(const LevelObject* object) {
     return object->flipy != rotated;
 }
 
+static bool objectIsHorizontal(const LevelObject* object) {
+    // Rotated a quarter turn either way (90 or 270 degrees)
+    f32 rotation = fmodf(fabsf(object->rotation), 180.0f);
+    return rotation > 45.0f && rotation < 135.0f;
+}
+
 void flipScreen(bool state) {
     screenFlipped = state;
 }
@@ -305,12 +311,12 @@ static void setGroundBounds(Player* player, f32 portalY, f32 height) {
 
 void checkCollisions(Player* player, float dt) {
     // Check collision with ground
-    if (player->y < 15 && player->gamemode != GAMEMODE_SHIP && player->gamemode != GAMEMODE_BALL) {
+    if (player->y < playerGetMidDistance(player) && player->gamemode != GAMEMODE_SHIP && player->gamemode != GAMEMODE_BALL) {
         if (player->gravityFlipped) {
             playerDestroy(player);
             return;
         }
-        player->y = 15;
+        player->y = playerGetMidDistance(player);
         playerHitGround(player, false);
     } else if (player->y > 1200) {
         playerDestroy(player);
@@ -318,23 +324,23 @@ void checkCollisions(Player* player, float dt) {
     }
 
     if (player->gamemode == GAMEMODE_SHIP) {
-        if (player->y > player->groundTop - 15.0f) {
-            player->y = player->groundTop - 15.0f;
+        if (player->y > player->groundTop - playerGetMidDistance(player)) {
+            player->y = player->groundTop - playerGetMidDistance(player);
             playerHitGround(player, !player->gravityFlipped);
-        } else if (player->y < player->groundBottom + 15.0f) {
-            player->y = player->groundBottom + 15.0f;
+        } else if (player->y < player->groundBottom + playerGetMidDistance(player)) {
+            player->y = player->groundBottom + playerGetMidDistance(player);
             playerHitGround(player, player->gravityFlipped);
         }
     }else if (player->gamemode == GAMEMODE_BALL) {
-        if (player->y > player->groundTop - 15.0f) {
-            player->y = player->groundTop - 15.0f;
+        if (player->y > player->groundTop - playerGetMidDistance(player)) {
+            player->y = player->groundTop - playerGetMidDistance(player);
             if (player->gravityFlipped) {
                 playerHitGround(player, false);
             } else if (player->velY > 0.0f) {
                 player->velY = 0.0f;
             }
-        } else if (player->y < player->groundBottom + 15.0f) {
-            player->y = player->groundBottom + 15.0f;
+        } else if (player->y < player->groundBottom + playerGetMidDistance(player)) {
+            player->y = player->groundBottom + playerGetMidDistance(player);
             if (!player->gravityFlipped) {
                 playerHitGround(player, false);
             } else if (player->velY < 0.0f) {
@@ -408,9 +414,10 @@ void checkCollisions(Player* player, float dt) {
                             setGroundBounds(player, object->y, 240.0f);
                             break;
                         case 99:
-
+                            playerChangeToMiniMode(player, false);
                         break;
                         case 101:
+                            playerChangeToMiniMode(player, true);
                         break;
                     }
                     player->canJump = false;
@@ -670,7 +677,7 @@ static void update(f32 dt) {
     }
 
     // A press can only activate an orb during the frame it happened
-    player.queuedHold = false;
+    // player.queuedHold = false; apparently actually this is allowed
     
     backgroundPosition += player.velX * deltaFrames * 0.9f * (-mirrored * 2 + 1);
     updateCamera(&player);
@@ -962,7 +969,7 @@ static void levelRender() {
         .x = camX + (player.x - camX) * mirrorScale,
         .y = player.y,
         .rotation = mirrored ? -player.rotation : player.rotation,
-        .scale = 1.0f,
+        .scale = player.scale,
         .flipx = mirrored,
         .flipy = player.gamemode == GAMEMODE_SHIP && player.gravityFlipped
     };

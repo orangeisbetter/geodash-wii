@@ -9,6 +9,7 @@
 typedef struct {
     float x;
     float y;
+    float scale;
     float velX;
     float velY;
     float rotation;
@@ -32,8 +33,10 @@ Player* playerInit(Player* player);
 bool playerIsFalling(Player* player);
 void playerHitGround(Player* player, bool reverseGravity);
 void playerDestroy(Player* player);
+float playerGetMidDistance(Player* player);
 void playerGetRect(Player* player, Rect* rect);
 void playerChangeGamemode(Player* player, Gamemode gamemode);
+void playerChangeToMiniMode(Player* player, bool mini);
 void flipGravity(Player* player, bool flipped, bool isPortal);
 void playerPadJump(Player* player, float velocity);
 void playerRingJump(Player* player, float strength, LevelObject* object);

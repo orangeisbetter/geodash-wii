@@ -6,6 +6,9 @@
 static const float ballGravityScale = 0.6f;   // Ball gravity relative to the cube
 static const float ballSwitchVel = -1.5f;     // Push towards the new floor when switching
 static const float ballMaxVel = 20.0f;        // Above anything reachable in an 8 block corridor
+static const float miniModeJumpScale = 0.8f;
+static const float playerSize = 30.0f;
+static bool miniMode = false;
 
 bool intersectsRect(Rect* a, Rect* b);
 void playerDestroy(Player* player);
@@ -13,6 +16,7 @@ void playerDestroy(Player* player);
 Player* playerInit(Player* player) {
     player->x = 0.0f;
     player->y = 0.0f;
+    player->scale = 1.0f;
     player->velX = 5.770002f;
     player->velY = 0.0f;
     player->rotation = 0.0f;
@@ -30,6 +34,7 @@ Player* playerInit(Player* player) {
     player->queuedHold = false;
     player->dead = false;
     player->gamemode = GAMEMODE_CUBE;
+    miniMode = false;
     return player;
 }
 
@@ -74,6 +79,19 @@ void playerChangeGamemode(Player* player, Gamemode gamemode) {
     }
 }
 
+void playerChangeToMiniMode(Player* player, bool mini){
+    if(mini){
+        miniMode = true;
+        player->scale = 0.5f;
+        player->jumpVel = 11.180032f * miniModeJumpScale;
+    }else{
+        miniMode = false;
+        player->scale = 1.0f;
+        player->jumpVel = 11.180032f;
+    }
+    playerChangeGamemode(player, player->gamemode);
+}
+
 void flipGravity(Player* player, bool flipped, bool isPortal) {
     if (player->gravityFlipped == flipped) {
         return;
@@ -91,12 +109,16 @@ static const float ballPadScale = 0.6f;
 static const float ballOrbScale = 0.7f;
 
 static float playerBumpScale(Player* player, bool isOrb) {
+    float totalMultiplier = 1.0f;
     switch (player->gamemode) {
         case GAMEMODE_BALL:
-            return isOrb ? ballOrbScale : ballPadScale;
-        default:
-            return 1.0f;
+            totalMultiplier = isOrb ? ballOrbScale : ballPadScale;
+        break;
     }
+    if(miniMode){
+        totalMultiplier *= miniModeJumpScale;
+    }
+    return totalMultiplier;
 }
 
 void playerPadJump(Player* player, float velocity) {
@@ -114,11 +136,15 @@ void playerRingJump(Player* player, float velocity, LevelObject* object) {
     }
 }
 
+float playerGetMidDistance(Player* player){
+    return playerSize / 2 * player->scale;
+}
+
 void playerGetRect(Player* player, Rect* rect) {
-    rect->x = player->x - 15.0f;
-    rect->y = player->y - 15.0f;
-    rect->width = 30.0f;
-    rect->height = 30.0f;
+    rect->x = player->x - playerGetMidDistance(player);
+    rect->y = player->y - playerGetMidDistance(player);
+    rect->width = playerSize * player->scale;
+    rect->height = playerSize * player->scale;
 }
 
 void playerCollideWithObject(Player* player, LevelObject* object, ObjectData* class) {
