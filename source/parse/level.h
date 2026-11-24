@@ -38,6 +38,7 @@ typedef struct {
     u16 base_color_channel;
     u16 detail_color_channel;
     Rect hitbox;
+    bool activated;
 } LevelObject;
 
 typedef enum{

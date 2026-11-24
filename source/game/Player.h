@@ -35,6 +35,6 @@ void playerDestroy(Player* player);
 void playerGetRect(Player* player, Rect* rect);
 void playerChangeGamemode(Player* player, Gamemode gamemode);
 void playerPadJump(Player* player, float velocity);
-void playerRingJump(Player* player, float strength);
+void playerRingJump(Player* player, float strength, LevelObject* object);
 void playerCollideWithObject(Player* player, LevelObject* object, ObjectData* class);
 void playerUpdate(Player* player, float dt);

@@ -93,7 +93,9 @@ static const f32 mirrorTransitionTime = 0.5f;
 static bool mirrored = false;
 
 // Horizontal speed in units per second, indexed by Speed (level setting kA4 / speed portals)
-static const f32 playerSpeeds[] = { 311.58f, 251.16f, 387.42f, 468.0f, 576.0f };
+static const f32 playerSpeeds[] = { 311.58f / 54, 251.16f / 54, 387.42f / 54, 468.0f / 54, 576.0f / 54 };
+static const f32 baseSpeed = 5.770002f;
+
 static const f32 velCubeJump = 1.94f;
 static const f32 velYellowPad = 2.77f;
 static const f32 velPinkPad = 1.79f;
@@ -263,15 +265,27 @@ int getCollisionType(const LevelObject* object) {
     }
 }
 
-void flipGravity(Player* player, bool flipped) {
+static bool objectIsUpsideDown(const LevelObject* object) {
+    // Upside down is either flipped vertically or rotated roughly 180 degrees, but not both
+    f32 rotation = fmodf(object->rotation, 360.0f);
+    if (rotation < 0.0f) {
+        rotation += 360.0f;
+    }
+    bool rotated = rotation > 90.0f && rotation < 270.0f;
+
+    return object->flipy != rotated;
+}
+
+void flipGravity(Player* player, bool flipped, bool isPortal) {
     if (player->gravityFlipped == flipped) {
         return;
     }
 
     player->gravityFlipped = flipped;
     player->gravityModifier *= -1.0f;
-
-    player->velY /= 2.0f;
+    if(isPortal){
+        player->velY /= 2.0f;
+    }
 }
 
 void flipScreen(bool state) {
@@ -344,10 +358,10 @@ void checkCollisions(Player* player, float dt) {
                 case PORTAL:
                     switch (object->id) {
                         case 10:
-                            flipGravity(player, false);
+                            flipGravity(player, false, true);
                             break;
                         case 11:
-                            flipGravity(player, true);
+                            flipGravity(player, true, true);
                             break;
                         case 12:
                             player->gamemode = GAMEMODE_CUBE;
@@ -365,41 +379,54 @@ void checkCollisions(Player* player, float dt) {
                     player->canJump = false;
                     break;
                 case PAD:
+                    if(object->activated){
+                        break;
+                    }
                     // SYS_Report("padid: %d\n", object->id);
                     switch(object->id){
                         case 35:
-                            playerPadJump(player, velYellowPad * playerSpeeds[0] / (60.0f * 0.9f));
+                            playerPadJump(player, velYellowPad * baseSpeed);
                         break;
                         case 67:
-                            SYS_Report("velocity before: %f\n", player->velY);
-                            flipGravity(player, !player->gravityFlipped);
-                            playerPadJump(player, velBluePad * playerSpeeds[0] / (60.0f * 0.9f));
-                            SYS_Report("velocity after: %f\n", player->velY);
+                            //SYS_Report("pad rotation: %d\n", object->flipy);
+                            if(objectIsUpsideDown(object)){
+                                flipGravity(player, false, false);
+                            }else{
+                                flipGravity(player, true, false);
+                            }
+                            playerPadJump(player, velBluePad * player->velX);
+                            //SYS_Report("velocity after: %f\n", player->velY);
                         break;
                         case 140:
-                            playerPadJump(player, velPinkPad * playerSpeeds[0] / (60.0f * 0.9f));
+                            playerPadJump(player, velPinkPad * baseSpeed);
                         break;
                     }
+                    object->activated = true;
                     break;
                 case ORB:
+                    if(object->activated){
+                        break;
+                    }
                     // SYS_Report("orbid: %d\n", object->id);
                     switch(object->id){
                         case 36:
-                            playerRingJump(player, velYellowOrb * playerSpeeds[0] / (60.0f * 0.9f));
+                            playerRingJump(player, velYellowOrb * baseSpeed, object);
                         break;
                         case 84:
-                            flipGravity(player, !player->gravityFlipped);
-                            playerRingJump(player, velBlueOrb * playerSpeeds[0] / (60.0f * 0.9f));
+                        if (player->queuedHold) {
+                            flipGravity(player, !player->gravityFlipped, false);
+                            playerRingJump(player, velBlueOrb * player->velX, object);
+                        }
                         break;
                         case 141:
-                            playerRingJump(player, velPinkOrb * playerSpeeds[0] / (60.0f * 0.9f));
+                            playerRingJump(player, velPinkOrb * baseSpeed, object);                          
                         break;
                     }
                     break;
                 case BOOST:
                     switch(object->id){
                         case 202:
-                            player->velX = playerSpeeds[2] / (60.0f * 0.9f);
+                            player->velX = playerSpeeds[2];
                         break;
                     }
                 default:
@@ -484,7 +511,10 @@ void levelInit(){
     screenFlipped = levelData.mirrorMode;
     mirrored = levelData.mirrorMode;
     mirrorProgress = levelData.mirrorMode ? 1.0f : 0.0f;
-    flipGravity(&player, levelData.flipGravity);
+    flipGravity(&player, levelData.flipGravity, false);
+    for (int i = 0; i < objectsSize; i++) {
+        objects[i].activated = false;
+    }
 }
 
 void levelRestart() {
@@ -601,6 +631,10 @@ static void update(f32 dt) {
         playerUpdate(&player, step);
         checkCollisions(&player, step);
     }
+
+    // A press can only activate an orb during the frame it happened
+    player.queuedHold = false;
+    
     backgroundPosition += player.velX * deltaFrames * 0.9f * (-mirrored * 2 + 1);
     updateCamera(&player);
     updateMirror(dt);

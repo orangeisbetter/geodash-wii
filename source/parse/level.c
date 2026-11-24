@@ -196,6 +196,7 @@ const LevelObject defaultObject = {
     .player_color_1 = false,
     .player_color_2 = false,
     .blending = false,
+    .activated = false
 };
 
 LevelObject* GDL_ParseLevelString(char* levelString, int* size, ObjectData* dataObjects, LevelData* levelData) {
