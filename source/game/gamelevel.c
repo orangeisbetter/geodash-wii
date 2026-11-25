@@ -66,7 +66,8 @@ typedef enum {
     PAD,
     PORTAL,
     ORB,
-    TRIGGER
+    TRIGGER,
+    BOOST
 } CollisionType;
 
 ObjectData* objectDefaults = NULL;
@@ -92,13 +93,20 @@ static f32 mirrorProgress = 0.0f;
 static const f32 mirrorTransitionTime = 0.5f;
 static bool mirrored = false;
 
+// Horizontal speed in units per second, indexed by Speed (level setting kA4 / speed portals)
+static const f32 playerSpeeds[] = { 311.58f / 54, 251.16f / 54, 387.42f / 54, 468.0f / 54, 576.0f / 54 };
+static const f32 baseSpeed = 5.770002f;
+
+// Ball spin in degrees per unit travelled (measured from the original game)
+static const f32 ballSpinPerUnit = 1.85f;
+
 static const f32 velCubeJump = 1.94f;
 static const f32 velYellowPad = 2.77f;
-// static const f32 velPinkPad = 1.79f;
+static const f32 velPinkPad = 1.79f;
 // static const f32 velRedPad = 3.65f;
 static const f32 velBluePad = -1.37f;
 static const f32 velYellowOrb = 1.91f;
-// static const f32 velPinkOrb = 1.37f;
+static const f32 velPinkOrb = 1.37f;
 // static const f32 velRedOrb = 2.68f;
 static const f32 velBlueOrb = -1.37f;
 // static const f32 velGreenOrb = -1.91f;
@@ -141,6 +149,45 @@ bool intersectsRect(Rect* a, Rect* b) {
             a->x + a->width >= b->x &&
             a->y <= b->y + b->height &&
             a->y + a->height >= b->y);
+}
+
+//calculate the object hitbox when object is rotated / flipped
+void getObjectRect(const LevelObject* object, const Hitbox* hb, Rect* rect){
+    static guVector front = { 0.0f, 0.0f, -1.0f };
+
+    // Same flip and rotation as RDR_drawLevelObject (without the screen mirror)
+    Mtx transform;
+    Mtx temp;
+    guMtxScale(transform, object->flipx ? -1.0f : 1.0f, object->flipy ? -1.0f : 1.0f, 1.0f);
+    guMtxRotAxisDeg(temp, &front, object->rotation);
+    guMtxConcat(temp, transform, transform);
+
+    f32 halfW = hb->width / 2.0f;
+    f32 halfH = hb->height / 2.0f;
+
+    guVector corners[4] = {
+        { hb->x - halfW, hb->y - halfH, 0.0f },
+        { hb->x + halfW, hb->y - halfH, 0.0f },
+        { hb->x + halfW, hb->y + halfH, 0.0f },
+        { hb->x - halfW, hb->y + halfH, 0.0f }
+    };
+
+    // Bounding box of the transformed corners (exact for multiples of 90 degrees)
+    f32 minX = 0.0f, maxX = 0.0f, minY = 0.0f, maxY = 0.0f;
+    for (int i = 0; i < 4; i++) {
+        guVector point;
+        guVecMultiply(transform, &corners[i], &point);
+
+        if (i == 0 || point.x < minX) minX = point.x;
+        if (i == 0 || point.x > maxX) maxX = point.x;
+        if (i == 0 || point.y < minY) minY = point.y;
+        if (i == 0 || point.y > maxY) maxY = point.y;
+    }
+
+    rect->x = object->x + minX;
+    rect->y = object->y + minY;
+    rect->width = maxX - minX;
+    rect->height = maxY - minY;
 }
 
 int getCollisionType(const LevelObject* object) {
@@ -194,47 +241,83 @@ int getCollisionType(const LevelObject* object) {
             return SOLID;
         case 35: // yellow
         case 67: // blue
+        case 140: // pink
+        case 1332: // bump_02_001.png
             return PAD;
         case 10: // blue
         case 11: // yellow
         case 12: // cube
         case 13: // ship
-        case 45:
-        case 46:
-        case 47:
-        case 99:
+        case 45: // mirror activate
+        case 46: // mirror deactivate
+        case 47: // ball
+        case 99: // changes size deactivate
+        case 101: // changes size activate
+        case 111: // UFO
+        case 286: // dual activate
+        case 287: // dual deactivate
+        case 660: // wave
+        case 745: // robot
+        case 747: // teleport activate
+        case 749: // teleport deactivate
+        case 1331: // spider
+        //one more for swing, #18 is in plist but not objects.json
             return PORTAL;
         case 36: // yellow
         case 84: // blue
+        case 141: // pink
+        // case 1022: //gravJumpRing_01_001.png
+        // case 1330: //dropRing_01_001.png
+        // case 1333: //ring_02_001.png
+        // case 1704: //dashRing_01_001.png
+        // case 1751: //dashRing_02_001.png
             return ORB;
+        case 202:
+            return BOOST;
         default:
             return NONE; // no collision
     }
 }
 
-void flipGravity(Player* player, bool flipped) {
-    if (player->gravityFlipped == flipped) {
-        return;
+static bool objectIsUpsideDown(const LevelObject* object) {
+    // Upside down is either flipped vertically or rotated roughly 180 degrees, but not both
+    f32 rotation = fmodf(object->rotation, 360.0f);
+    if (rotation < 0.0f) {
+        rotation += 360.0f;
     }
+    bool rotated = rotation > 90.0f && rotation < 270.0f;
 
-    player->gravityFlipped = flipped;
-    player->gravityModifier *= -1.0f;
+    return object->flipy != rotated;
+}
 
-    player->velY /= 2.0f;
+static bool objectIsHorizontal(const LevelObject* object) {
+    // Rotated a quarter turn either way (90 or 270 degrees)
+    f32 rotation = fmodf(fabsf(object->rotation), 180.0f);
+    return rotation > 45.0f && rotation < 135.0f;
 }
 
 void flipScreen(bool state) {
     screenFlipped = state;
 }
 
+static void setGroundBounds(Player* player, f32 portalY, f32 height) {
+    // Corridor centred on the portal, snapped to whole blocks, never below the real ground
+    f32 bottom = floorf((portalY - height / 2.0f) / 30.0f) * 30.0f;
+    if (bottom < 0.0f) {
+        bottom = 0.0f;
+    }
+    player->groundBottom = bottom;
+    player->groundTop = bottom + height;
+}
+
 void checkCollisions(Player* player, float dt) {
     // Check collision with ground
-    if (player->y < 15 && player->gamemode != GAMEMODE_SHIP) {
+    if (player->y < playerGetMidDistance(player) && player->gamemode != GAMEMODE_SHIP && player->gamemode != GAMEMODE_BALL) {
         if (player->gravityFlipped) {
             playerDestroy(player);
             return;
         }
-        player->y = 15;
+        player->y = playerGetMidDistance(player);
         playerHitGround(player, false);
     } else if (player->y > 1200) {
         playerDestroy(player);
@@ -242,12 +325,28 @@ void checkCollisions(Player* player, float dt) {
     }
 
     if (player->gamemode == GAMEMODE_SHIP) {
-        if (player->y > player->groundTop - 15.0f) {
-            player->y = player->groundTop - 15.0f;
+        if (player->y > player->groundTop - playerGetMidDistance(player)) {
+            player->y = player->groundTop - playerGetMidDistance(player);
             playerHitGround(player, !player->gravityFlipped);
-        } else if (player->y < player->groundBottom + 15.0f) {
-            player->y = player->groundBottom + 15.0f;
+        } else if (player->y < player->groundBottom + playerGetMidDistance(player)) {
+            player->y = player->groundBottom + playerGetMidDistance(player);
             playerHitGround(player, player->gravityFlipped);
+        }
+    }else if (player->gamemode == GAMEMODE_BALL) {
+        if (player->y > player->groundTop - playerGetMidDistance(player)) {
+            player->y = player->groundTop - playerGetMidDistance(player);
+            if (player->gravityFlipped) {
+                playerHitGround(player, false);
+            } else if (player->velY > 0.0f) {
+                player->velY = 0.0f;
+            }
+        } else if (player->y < player->groundBottom + playerGetMidDistance(player)) {
+            player->y = player->groundBottom + playerGetMidDistance(player);
+            if (!player->gravityFlipped) {
+                playerHitGround(player, false);
+            } else if (player->velY < 0.0f) {
+                player->velY = 0.0f;
+            }
         }
     }
 
@@ -288,30 +387,22 @@ void checkCollisions(Player* player, float dt) {
             continue;
         }
 
-        Hitbox* hb = &objectDefaults[object->id].hitbox;
-
-        Rect objectRect = {
-            object->x + hb->x - hb->width / 2,
-            object->y + hb->y - hb->height / 2,
-            hb->width,
-            hb->height
-        };
-
-        if (intersectsRect(&playerRect, &objectRect)) {
+        if (intersectsRect(&playerRect, &object->hitbox)) {
             switch (getCollisionType(object)) {
                 case PORTAL:
                     switch (object->id) {
                         case 10:
-                            flipGravity(player, false);
+                            flipGravity(player, false, true);
                             break;
                         case 11:
-                            flipGravity(player, true);
+                            flipGravity(player, true, true);
                             break;
                         case 12:
-                            player->gamemode = GAMEMODE_CUBE;
+                            playerChangeGamemode(player, GAMEMODE_CUBE);
                             break;
                         case 13:
-                            player->gamemode = GAMEMODE_SHIP;
+                            playerChangeGamemode(player, GAMEMODE_SHIP);
+                            setGroundBounds(player, object->y, 300.0f);
                             break;
                         case 45:
                             flipScreen(true);
@@ -319,15 +410,70 @@ void checkCollisions(Player* player, float dt) {
                         case 46:
                             flipScreen(false);
                             break;
+                        case 47:
+                            playerChangeGamemode(player, GAMEMODE_BALL);
+                            setGroundBounds(player, object->y, 240.0f);
+                            break;
+                        case 99:
+                            playerChangeToMiniMode(player, false);
+                        break;
+                        case 101:
+                            playerChangeToMiniMode(player, true);
+                        break;
                     }
                     player->canJump = false;
                     break;
                 case PAD:
-                    playerPadJump(player, 16.0f);
+                    if(object->activated){
+                        break;
+                    }
+                    // SYS_Report("padid: %d\n", object->id);
+                    switch(object->id){
+                        case 35:
+                            playerPadJump(player, velYellowPad * baseSpeed);
+                        break;
+                        case 67:
+                            //SYS_Report("pad rotation: %d\n", object->flipy);
+                            if(objectIsUpsideDown(object)){
+                                flipGravity(player, false, false);
+                            }else{
+                                flipGravity(player, true, false);
+                            }
+                            playerPadJump(player, velBluePad * player->velX);
+                            //SYS_Report("velocity after: %f\n", player->velY);
+                        break;
+                        case 140:
+                            playerPadJump(player, velPinkPad * baseSpeed);
+                        break;
+                    }
+                    object->activated = true;
                     break;
                 case ORB:
-                    playerRingJump(player, 1);
+                    if(object->activated){
+                        break;
+                    }
+                    // SYS_Report("orbid: %d\n", object->id);
+                    switch(object->id){
+                        case 36:
+                            playerRingJump(player, velYellowOrb * baseSpeed, object);
+                        break;
+                        case 84:
+                        if (player->queuedHold) {
+                            flipGravity(player, !player->gravityFlipped, false);
+                            playerRingJump(player, velBlueOrb * player->velX, object);
+                        }
+                        break;
+                        case 141:
+                            playerRingJump(player, velPinkOrb * baseSpeed, object);                          
+                        break;
+                    }
                     break;
+                case BOOST:
+                    switch(object->id){
+                        case 202:
+                            player->velX = playerSpeeds[2];
+                        break;
+                    }
                 default:
                     playerCollideWithObject(player, object, &objectDefaults[object->id]);
                     break;
@@ -338,16 +484,7 @@ void checkCollisions(Player* player, float dt) {
     for (int i = 0; i < hazardsCount; i++) {
         LevelObject* hazard = hazards[i];
 
-        Hitbox* hb = &objectDefaults[hazard->id].hitbox;
-
-        Rect hazardRect = {
-            hazard->x + hb->x - hb->width / 2,
-            hazard->y + hb->y - hb->height / 2,
-            hb->width,
-            hb->height
-        };
-
-        if (intersectsRect(&playerRect, &hazardRect)) {
+        if (intersectsRect(&playerRect, &hazard->hitbox)) {
             playerDestroy(player);
         }
     }
@@ -370,6 +507,12 @@ void* loadThreadHandler(void* data) {
     if (!objects) {
         currentLevel = NULL;
         return NULL;
+    }
+
+    //setup object hitboxes
+    for (int i = 0; i < objectsSize; i++) {
+        LevelObject* object = &objects[i];
+        getObjectRect(object, &objectDefaults[object->id].hitbox, &object->hitbox);
     }
 
     free(levelString);
@@ -413,7 +556,11 @@ void levelInit(){
     screenFlipped = levelData.mirrorMode;
     mirrored = levelData.mirrorMode;
     mirrorProgress = levelData.mirrorMode ? 1.0f : 0.0f;
-    flipGravity(&player, levelData.flipGravity);
+    flipGravity(&player, levelData.flipGravity, false);
+    playerChangeToMiniMode(&player, levelData.minimode);
+    for (int i = 0; i < objectsSize; i++) {
+        objects[i].activated = false;
+    }
 }
 
 void levelRestart() {
@@ -530,6 +677,10 @@ static void update(f32 dt) {
         playerUpdate(&player, step);
         checkCollisions(&player, step);
     }
+
+    // A press can only activate an orb during the frame it happened
+    // player.queuedHold = false; apparently actually this is allowed
+    
     backgroundPosition += player.velX * deltaFrames * 0.9f * (-mirrored * 2 + 1);
     updateCamera(&player);
     updateMirror(dt);
@@ -574,6 +725,11 @@ static void levelRun(f32 deltaTime) {
         case GAMEMODE_SHIP:
             player.rotation = -atan2(player.velY, player.velX) * (180.0f / M_PI);
             break;
+
+        case GAMEMODE_BALL:
+            // velX * 0.9 units per physics frame, 60 frames per second
+            player.rotation += ballSpinPerUnit * player.velX * 0.9f * 60.0f * deltaTime * player.gravityModifier;
+        break;
     }
 
     camX = player.x + 2.5f * 30.0f;
@@ -642,6 +798,28 @@ static void levelRun(f32 deltaTime) {
     }
 }
 
+void figureOutPortalOffset(LevelObject* portalObject){
+    //SYS_Report("portal rotation of id %d: %f\n", portalObject->id, portalObject->rotation);
+
+    f32 defaultOffset = 1.0f;
+    switch(portalObject->id){
+        case 45:
+            defaultOffset = 0;
+        break;
+        case 13:
+        case 47:
+            defaultOffset = 2;
+        break;
+    }
+    if(portalObject->rotation == 90.0f){
+        portalObject->x -= defaultOffset;
+    }else if(portalObject->rotation == 270.0f || portalObject->rotation == -90.0f){
+        portalObject->x += defaultOffset;
+    }else{
+        portalObject->y -= defaultOffset;
+    }   
+}
+
 static void levelRender() {
     f32 mirrorScale = cosf(mirrorProgress * M_PI);
     mirrored = mirrorScale < 0.0f;
@@ -661,6 +839,9 @@ static void levelRender() {
         if (object->x < viewBoundsL || object->x > viewBoundsR) {
             continue;
         }
+        
+            //SYS_Report("this unknown object is on screen: %s\n", objectDefaults[object->id].texture);
+        
 
         // then check to see it it's an animation trigger
 
@@ -690,45 +871,6 @@ static void levelRender() {
         }
 
         sortBuffer.objects[sortBuffer.size++] = object;
-
-        /*
-        // portals
-        char* portalString;
-        if ((portalString = isPortalId(object->id))) {
-            texture_info* tex = ht_search(portalString);
-            if (tex == NULL) {
-                SYS_Report("Can't find portal texture %d\n", object->id);
-                continue;
-            }
-
-            RenderObject* renderObject = RDR_RenderCacheAdd(&renderCache);
-            if (!renderObject) {
-                SYS_Report(__FILE__ ": Cannot create render object!!!\n");
-            }
-
-            renderObject->x = object->x;
-            renderObject->y = object->y - 2;
-            renderObject->rotation = object->rotation;
-            renderObject->flipx = object->flipx;
-            renderObject->flipy = object->flipy;
-            renderObject->z_layer = 4;
-            renderObject->z_order = object->z_order;
-            renderObject->z = 0;
-            renderObject->tex = tex;
-
-            switch (objectData->color_type) {
-                case COLOR_TYPE_BASE:
-                    renderObject->color = getColorChannel(baseColorChannel);
-                    break;
-                case COLOR_TYPE_DETAIL:
-                    renderObject->color = getColorChannel(detailColorChannel);
-                    break;
-                case COLOR_TYPE_BLACK:
-                    renderObject->color.color = 0x000000ff;
-                    renderObject->color.blending = false;
-            }
-        }
-        */
     }
 
     // sort object cache (for z order)
@@ -745,8 +887,13 @@ static void levelRender() {
 
     // Background and ground are special, they don't use the camera view matrix. IT'S ALL AN ILLUSION
     RDR_drawBackground(&backgroundTexture, backgroundPosition, camY, 0.45f, getColorChannel(1000).color);
-    RDR_drawGround(&groundTexture, backgroundPosition, camY, viewScale, getColorChannel(1001).color);
+    bool hasCeiling = player.gamemode == GAMEMODE_SHIP || player.gamemode == GAMEMODE_BALL;
+    f32 floorY = hasCeiling ? player.groundBottom : 0.0f;
 
+    RDR_drawGround(&groundTexture, backgroundPosition, camY - floorY, viewScale, getColorChannel(1001).color, false);
+    if (hasCeiling) {
+        RDR_drawGround(&groundTexture, backgroundPosition, camY - player.groundTop, viewScale, getColorChannel(1001).color, true);
+    }
     // Set up camera view matrix
     guMtxTrans(view, -camX, -camY, -10.0f);
     guMtxScaleApply(view, view, viewScale, viewScale, 1.0f);
@@ -761,6 +908,7 @@ static void levelRender() {
     GFX_LoadTexture(&gameSheetGlow, GX_TEXMAP5);
 
     int i = 0;
+    int itoreturnto = 0;
     for (; i < sortBuffer.size; i++) {
         const LevelObject* object = sortBuffer.objects[i];
 
@@ -770,7 +918,13 @@ static void levelRender() {
         }
 
         if (object->z_layer > 4) {
-            break;
+            //if the object is drawn infront of the player, then go through this list and find objects linked with objects that should be drawn behind the player. namely portals.
+            char* portalTexture = isPortalId(object->id);
+            if(portalTexture == NULL){
+                continue;
+            }
+        }else{
+            itoreturnto++;
         }
 
         f32 x = 0.0f;
@@ -798,14 +952,32 @@ static void levelRender() {
         Mtx model;
         guMtxScale(model, scale, scale, 1.0f);
         guMtxTransApply(model, model, x, y, 0.0f);
-        RDR_drawLevelObject(object, &objectDefaults[object->id], mirrored, alpha, model, view);
+        if(object->z_layer <= 4){
+            RDR_drawLevelObject(object, &objectDefaults[object->id], mirrored, alpha, model, view);
+        }else{
+            //portals
+            LevelObject notObject;
+            notObject = *object;
+            figureOutPortalOffset(&notObject);         
+            
+            ObjectData notObjectDefaults;
+            notObjectDefaults = objectDefaults[object->id];
+            notObjectDefaults.exists = true;
+            notObjectDefaults.texture = isPortalId(object->id);
+            notObjectDefaults.default_z_layer = 0;
+            notObjectDefaults.default_z_order = 0;
+            notObjectDefaults.numChildren = 0;
+            
+            RDR_drawLevelObject(&notObject, &notObjectDefaults, mirrored, alpha, model, view);
+        }
     }
-
+    i = itoreturnto;//return back to where i should be
+  
     SpriteInfo playerSprite = {
         .x = camX + (player.x - camX) * mirrorScale,
         .y = player.y,
         .rotation = mirrored ? -player.rotation : player.rotation,
-        .scale = 1.0f,
+        .scale = player.scale,
         .flipx = mirrored,
         .flipy = player.gamemode == GAMEMODE_SHIP && player.gravityFlipped
     };
@@ -820,6 +992,9 @@ static void levelRender() {
             RDR_drawSpriteFromMap(ht_search("ship_01_001.png"), &playerSprite, 1011, view);
             RDR_drawSpriteFromMap(ht_search("ship_01_2_001.png"), &playerSprite, 1012, view);
             break;
+        case GAMEMODE_BALL:
+            RDR_drawSpriteFromMap(ht_search("player_ball_00_001.png"), &playerSprite, 1011, view);
+            RDR_drawSpriteFromMap(ht_search("player_ball_00_2_001.png"), &playerSprite, 1012, view);
     }
 
     for (; i < sortBuffer.size; i++) {
@@ -859,8 +1034,10 @@ static void levelRender() {
     }
 
     // Draw line (VERY IMPORTANT)
-    RDR_drawLine(view, camY, viewScale);
-
+    RDR_drawLine(view, camY - floorY, viewScale);
+    if (hasCeiling) {
+        RDR_drawLine(view, camY - player.groundTop, viewScale);
+    }
     GFX_ResetDrawMode();
 
     // --------------------------------------------------------------------

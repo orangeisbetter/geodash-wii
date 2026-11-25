@@ -2,21 +2,31 @@
 
 #include "gamelevel.h"
 
+// Ball physics, measured from the original game (1x speed)
+static const float ballGravityScale = 0.6f;   // Ball gravity relative to the cube
+static const float ballSwitchVel = -1.5f;     // Push towards the new floor when switching
+static const float ballMaxVel = 20.0f;        // Above anything reachable in an 8 block corridor
+static const float miniModeJumpScale = 0.8f;
+static const float playerSize = 30.0f;
+static const float cubeJumpVel = 11.180032f;
+
 bool intersectsRect(Rect* a, Rect* b);
 void playerDestroy(Player* player);
 
 Player* playerInit(Player* player) {
     player->x = 0.0f;
     player->y = 0.0f;
+    player->scale = 1.0f;
     player->velX = 5.770002f;
     player->velY = 0.0f;
     player->rotation = 0.0f;
     player->gravity = 0.958199f;
-    player->jumpVel = 11.180032f;
+    player->jumpVel = cubeJumpVel;
     player->groundBottom = 0.0f;
     player->groundTop = 300.0f;
     player->gravityModifier = 1.0f;
     player->gravityFlipped = false;
+    player->miniMode = false;
     player->restrictedZone = false;
     player->grounded = false;
     player->canJump = false;
@@ -69,41 +79,84 @@ void playerChangeGamemode(Player* player, Gamemode gamemode) {
     }
 }
 
-void playerPadJump(Player* player, float velocity) {
-    player->velY = velocity * player->gravityModifier;
+void playerChangeToMiniMode(Player* player, bool mini){
+    if(mini){
+        player->miniMode = true;
+        player->scale = 0.5f;
+        player->jumpVel = cubeJumpVel * miniModeJumpScale;
+    }else{
+        player->miniMode = false;
+        player->scale = 1.0f;
+        player->jumpVel = cubeJumpVel;
+    }
+    player->velY = player->velY / 2.0f;
     player->grounded = false;
+    player->canJump = false;
 }
 
-void playerRingJump(Player* player, float strength) {
-    if (player->queuedHold) {
-        player->queuedHold = false;
+void flipGravity(Player* player, bool flipped, bool isPortal) {
+    if (player->gravityFlipped == flipped) {
+        return;
+    }
 
-        player->velY = player->jumpVel * strength * player->gravityModifier;
-        player->grounded = false;
+    player->gravityFlipped = flipped;
+    player->gravityModifier *= -1.0f;
+    if(isPortal){
+        player->velY /= 2.0f;
     }
 }
 
+// Pad and orb strength in ball mode relative to the cube (measured from the original game)
+static const float ballPadScale = 0.6f;
+static const float ballOrbScale = 0.7f;
+
+static float playerBumpScale(Player* player, bool isOrb) {
+    float totalMultiplier = 1.0f;
+    switch (player->gamemode) {
+        case GAMEMODE_BALL:
+            totalMultiplier = isOrb ? ballOrbScale : ballPadScale;
+        break;
+    }
+    if(player->miniMode){
+        totalMultiplier *= miniModeJumpScale;
+    }
+    return totalMultiplier;
+}
+
+void playerPadJump(Player* player, float velocity) {
+    player->velY = velocity * playerBumpScale(player, false) * player->gravityModifier;
+    player->grounded = false;
+}
+
+void playerRingJump(Player* player, float velocity, LevelObject* object) {
+    if (player->queuedHold) {
+        player->queuedHold = false;
+
+        player->velY = velocity * playerBumpScale(player, true) * player->gravityModifier;
+        player->grounded = false;
+        object->activated = true;
+    }
+}
+
+float playerGetMidDistance(Player* player){
+    return playerSize / 2 * player->scale;
+}
+
 void playerGetRect(Player* player, Rect* rect) {
-    rect->x = player->x - 15.0f;
-    rect->y = player->y - 15.0f;
-    rect->width = 30.0f;
-    rect->height = 30.0f;
+    rect->x = player->x - playerGetMidDistance(player);
+    rect->y = player->y - playerGetMidDistance(player);
+    rect->width = playerSize * player->scale;
+    rect->height = playerSize * player->scale;
 }
 
 void playerCollideWithObject(Player* player, LevelObject* object, ObjectData* class) {
     Rect playerRect;
     playerGetRect(player, &playerRect);
 
-    Hitbox* hb = &class->hitbox;
+    Rect objectRect = object->hitbox;
 
-    Rect objectRect = {
-        object->x + hb->x - hb->width / 2.0f,
-        object->y + hb->y - hb->height / 2.0f,
-        hb->width,
-        hb->height
-    };
-
-    float tolerance = 10.0f;
+    //tolerance scaled for miniMode
+    float tolerance = 10.0f * player->scale;
 
     float halfH = playerRect.height / 2.0f;
 
@@ -217,7 +270,28 @@ static void playerUpdateJump(Player* player, float dt) {
             }
         } break;
         case GAMEMODE_BALL:
-            break;
+            // Switch gravity only while touching the ground (or ceiling, when flipped)
+            if (player->queuedHold && player->canJump) {
+                player->queuedHold = false;
+                player->grounded = false;
+
+                flipGravity(player, !player->gravityFlipped, false);
+                player->velY = ballSwitchVel * player->gravityModifier;
+            }
+            player->canJump = false;
+
+            player->velY -= player->gravity * ballGravityScale * player->gravityModifier * dt;
+
+            if (player->gravityFlipped) {
+                if (player->velY > ballMaxVel) {
+                    player->velY = ballMaxVel;
+                }
+            } else {
+                if (player->velY < -ballMaxVel) {
+                    player->velY = -ballMaxVel;
+                }
+            }
+        break;
     }
 }
 

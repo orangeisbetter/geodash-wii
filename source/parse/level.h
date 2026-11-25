@@ -6,6 +6,13 @@
 #include "../game/gamemode.h"
 
 typedef struct {
+    float x;
+    float y;
+    float width;
+    float height;
+} Rect;
+
+typedef struct {
     int id;
     f32 x;
     f32 y;
@@ -30,6 +37,8 @@ typedef struct {
     };
     u16 base_color_channel;
     u16 detail_color_channel;
+    Rect hitbox;
+    bool activated;
 } LevelObject;
 
 typedef enum{

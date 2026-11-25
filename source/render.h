@@ -62,7 +62,7 @@ int RDR_loadSpriteSheets();
 TexSize RDR_getTexSize(int sheetId);
 
 void RDR_drawBackground(GXTexObj* background, f32 x, f32 y, f32 scale, u32 color);
-void RDR_drawGround(GXTexObj* ground, f32 x, f32 y, f32 viewScale, u32 color);
+void RDR_drawGround(GXTexObj* ground, f32 x, f32 y, f32 viewScale, u32 color, bool ceiling);
 void RDR_drawLine(Mtx view, f32 camY, f32 viewScale);
 void RDR_drawMenuBackground(f32 x, f32 y, f32 scale, u32 topColor, u32 bottomColor);
 

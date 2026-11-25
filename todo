@@ -1,8 +1,9 @@
 [ ] fix canJump flag usage
 [ ] cube rotation
 [ ] level settings (default colors, etc)
-[ ] fading color triggers
-[ ] Horizontal portals should not halve velocity (for some reason that's how it works, idk) also hitboxes
+[X] fading color triggers
+[ ] Horizontal portals should not halve velocity (for some reason that's how it works, idk)
+[X] hitboxes should rotate for rotated objects
 [ ] particles and streaks
 [ ] proper death handling (play death sound, freeze for a few frames, then restart)
 [X] asynchronous level loading (use multithreading)
@@ -14,6 +15,6 @@
 [X] main screen animation
 [ ] upsidedown ships textures
 [ ] other modes
-[ ] pads
+[X] pads
 [ ] glow effects
-[ ] add/fix ship top ground
+[X] add/fix ship top ground

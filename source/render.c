@@ -88,7 +88,7 @@ void RDR_drawBackground(GXTexObj* background, f32 x, f32 y, f32 scale, u32 color
     GX_End();
 }
 
-void RDR_drawGround(GXTexObj* ground, f32 x, f32 y, f32 viewScale, u32 color) {
+void RDR_drawGround(GXTexObj* ground, f32 x, f32 y, f32 viewScale, u32 color, bool ceiling) {
     x = -x;
     // x *= viewScale;
     y = -y;
@@ -112,11 +112,14 @@ void RDR_drawGround(GXTexObj* ground, f32 x, f32 y, f32 viewScale, u32 color) {
 
     GX_Begin(GX_QUADS, GX_VTXFMT0, 4);
 
+    // Ceilings extend upwards from their edge, floors downwards
+    f32 far = ceiling ? y + 128.0f * viewScale : y - 128.0f * viewScale;
+
     GFX_Plot(-w2, y, 0.0f, -texXOffset, 0.0f, color);
     GFX_Plot(w2, y, 0.0f, -texXOffset + texw, 0.0f, color);
-    GFX_Plot(w2, y - 128.0f * viewScale, 0.0f, -texXOffset + texw, 1.0f, color);
-    GFX_Plot(-w2, y - 128.0f * viewScale, 0.0f, -texXOffset, 1.0f, color);
-
+    GFX_Plot(w2, far, 0.0f, -texXOffset + texw, 1.0f, color);
+    GFX_Plot(-w2, far, 0.0f, -texXOffset, 1.0f, color);
+    
     GX_End();
 }
 
@@ -248,9 +251,11 @@ void RDR_drawSpriteFromMap2(texture_info* tex, SpriteInfo* sprite, u32 color, bo
     f32 dh = tex->spriteSize.y * sprite->scale;
 
     // TODO: Use this offset pweese
-    f32 offsetx = tex->spriteOffset.x;
-    f32 offsety = tex->spriteOffset.y;
-
+    //f32 offsetx = tex->spriteOffset.x;
+    //f32 offsety = tex->spriteOffset.y;
+    f32 offsetx = tex->spriteOffset.x * sprite->scale;
+    f32 offsety = tex->spriteOffset.y * sprite->scale;
+    
     f32 sizex = tex->textureRotated ? tex->textureRect.size.y : tex->textureRect.size.x;
     f32 sizey = tex->textureRotated ? tex->textureRect.size.x : tex->textureRect.size.y;
     
@@ -275,7 +280,8 @@ void RDR_drawSpriteFromMap2(texture_info* tex, SpriteInfo* sprite, u32 color, bo
 
     Mtx model, modelView;
     guMtxRotAxisDeg(model, &forward, sprite->rotation);
-    guMtxApplyTrans(model, model, tex->spriteOffset.x, tex->spriteOffset.y, 0.0f);
+    //guMtxApplyTrans(model, model, tex->spriteOffset.x, tex->spriteOffset.y, 0.0f);
+    guMtxApplyTrans(model, model, offsetx, offsety, 0.0f);
     guMtxTransApply(model, model, dx, dy, 0.0f);
     guMtxConcat(view, model, modelView);
 

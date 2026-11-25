@@ -9,6 +9,7 @@
 typedef struct {
     float x;
     float y;
+    float scale;
     float velX;
     float velY;
     float rotation;
@@ -18,6 +19,7 @@ typedef struct {
     float groundTop;        // Top of restricted zone
     float gravityModifier;  // 1 for normal gravity, -1 for flipped gravity
     bool gravityFlipped;
+    bool miniMode;
     bool restrictedZone;
     bool grounded;
     bool canJump;
@@ -28,20 +30,16 @@ typedef struct {
     Gamemode gamemode;
 } Player;
 
-typedef struct {
-    float x;
-    float y;
-    float width;
-    float height;
-} Rect;
-
 Player* playerInit(Player* player);
 bool playerIsFalling(Player* player);
 void playerHitGround(Player* player, bool reverseGravity);
 void playerDestroy(Player* player);
+float playerGetMidDistance(Player* player);
 void playerGetRect(Player* player, Rect* rect);
 void playerChangeGamemode(Player* player, Gamemode gamemode);
+void playerChangeToMiniMode(Player* player, bool mini);
+void flipGravity(Player* player, bool flipped, bool isPortal);
 void playerPadJump(Player* player, float velocity);
-void playerRingJump(Player* player, float strength);
+void playerRingJump(Player* player, float strength, LevelObject* object);
 void playerCollideWithObject(Player* player, LevelObject* object, ObjectData* class);
 void playerUpdate(Player* player, float dt);

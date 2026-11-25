@@ -195,6 +195,7 @@ const LevelObject defaultObject = {
     .player_color_1 = false,
     .player_color_2 = false,
     .blending = false,
+    .activated = false
 };
 
 Color parseColor(char* colorString) {
@@ -511,6 +512,7 @@ LevelObject* GDL_ParseLevelString(char* levelString, int* size, ObjectData* data
         }
 
         if (last) {
+            
             // const char* texturename = object.id < 100 ? objectTextures[object.id] : NULL;
             // SYS_Report("Object: ID: %4d, x: %7.1f, y: %7.1f, texture name: %s.png\n", object.id, object.x, object.y, texturename);
 
@@ -526,6 +528,10 @@ LevelObject* GDL_ParseLevelString(char* levelString, int* size, ObjectData* data
 
             objects[objectsSize] = object;
             objectsSize++;
+
+            if(isPortalId(object.id)){
+                //SYS_Report("there is a portal here!\n");
+            }
 
             object = defaultObject;
         }
