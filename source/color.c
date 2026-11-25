@@ -164,3 +164,10 @@ void updateColorChannels(f32 dt){
         }
     }
 }
+
+void colorConfigPush(ColorConfig* config, int channel, Color color) {
+    config->colors[config->length++] = (ColorData) {
+        .colorId = channel,
+        .color = color
+    };
+}

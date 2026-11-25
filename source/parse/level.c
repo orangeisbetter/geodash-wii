@@ -3,14 +3,13 @@
 #include <stdio.h>
 #include <zlib.h>
 #include <malloc.h>
-#include <assert.h>
 #include <string.h>
 #include <errno.h>
 #include <stdlib.h>
 
 #include "../base64.h"
-#include "../data.h"
 #include "../color.h"
+#include "../util/error.h"
 
 #define CHUNK_SIZE 8192
 
@@ -199,6 +198,210 @@ const LevelObject defaultObject = {
     .activated = false
 };
 
+Color parseColor(char* colorString) {
+    Color color = {
+        .color = 0 | 0xff,
+        .blending = false
+    };
+
+    for (char* key = strtok(colorString, "_"); key && key[0]; key = strtok(NULL, "_")) {
+        char* value = strtok(NULL, "_");
+        // should always be key-value pairs
+        assert(value && value[0]);
+
+        switch (atoi(key)) {
+            case 1:
+                color.color |= (u8) atoi(value) << 24;
+                break;
+            case 2:
+                color.color |= (u8) atoi(value) << 16;
+                break;
+            case 3:
+                color.color |= (u8) atoi(value) << 8;
+                break;
+            case 5:
+                color.blending = atoi(value) == 1;
+                break;
+        }
+    }
+
+    return color;
+}
+
+static void processColorString(ColorConfig* config, char* colorString) {
+    for (char* subString = strtok(colorString, "|"); subString && subString[0]; subString = strtok(NULL, "|")) {
+        Color color;
+        int colorChannel = -1;
+
+        for (char* key = strtok(colorString, "_"); key && key[0]; key = strtok(NULL, "_")) {
+            int intKey = atoi(key);
+            char* value = strtok(NULL, "_");
+            // should always be key-value pairs
+            assert(value && value[0]);
+
+            switch (intKey) {
+                case 1:
+                    color.color |= (u8) atoi(value) << 24;
+                    break;
+                case 2:
+                    color.color |= (u8) atoi(value) << 16;
+                    break;
+                case 3:
+                    color.color |= (u8) atoi(value) << 8;
+                    break;
+                case 5:
+                    color.blending = atoi(value) == 1;
+                    break;
+                case 6:
+                    colorChannel = atoi(value);
+                    break;
+                default:
+                    SYS_Report("Warning: Unhandled color string key %d\n", intKey);
+                    break;
+            }
+        }
+
+        assert(colorChannel != -1);
+
+        colorConfigPush(config, colorChannel, color);
+    }
+}
+
+void parseLevelData(char* levelString, char** levelStringPtr, LevelData* levelData) {
+    bool last;
+    int length;
+
+    do {
+        char* key = getNextData(levelString, &length, &levelString, &last);
+
+        assert(key[0] == 'k');
+        int val2 = atoi(&key[2]);
+
+        char* value = getNextData(levelString, &length, &levelString, &last);
+
+        switch (key[1]){
+            case 'A': {
+                int ival = atoi(value);
+                f32 fval = atof(value);
+                switch (val2){
+                    case 2:
+                        levelData->gamemode = ival;
+                        break;
+                    case 3:
+                        levelData->minimode = ival;
+                        break;
+                    case 4:
+                        levelData->speed = ival;
+                        break;
+                    case 5:
+                        levelData->obj2Blending = ival;
+                        break;
+                    case 6:
+                        levelData->BGTexId = ival;
+                        break;
+                    case 7:
+                        levelData->groundTexId = ival;
+                        break;
+                    case 8:
+                        levelData->dualMode = ival;
+                        break;
+                    case 9:
+                        levelData->startPosObj = ival;
+                        break;
+                    case 10:
+                        levelData->multiPlayerMode = ival;
+                        break;
+                    case 11:
+                        levelData->flipGravity = ival;
+                        break;
+                    case 13:
+                        levelData->songOffset = fval;
+                        break;
+                    case 14:
+                        // levelData.guideline = value
+                        break;
+                    case 15:
+                        levelData->fadeIn = ival;
+                        break;
+                    case 16:
+                        levelData->fadeOut = ival;
+                        break;
+                    case 17:
+                        levelData->groundLineId = ival;
+                        break;
+                    case 18:
+                        levelData->font = ival;
+                        break;
+                    case 20:
+                        levelData->reverseMode = ival;
+                        break;
+                    case 22:
+                        levelData->platformerMode = ival;
+                        break;
+                    case 25:
+                        levelData->middlegroundTexId = ival;
+                        break;
+                    case 28:
+                        levelData->mirrorMode = ival;
+                        break;
+                    case 29:
+                        levelData->rotateGameplay = ival;
+                        break;
+                    default:
+                        SYS_Report("Warning: Unhandled level data key %s\n", key);
+                        break;
+                }
+                break;
+            }
+
+            case 'S': {
+                switch (val2) {
+                    case 29:
+                        colorConfigPush(&levelData->colorConfig, 1000, parseColor(value));
+                        break;
+                    case 30:
+                        colorConfigPush(&levelData->colorConfig, 1001, parseColor(value));
+                        break;
+                    case 31:
+                        colorConfigPush(&levelData->colorConfig, 1002, parseColor(value));
+                        break;
+                    case 32:
+                        colorConfigPush(&levelData->colorConfig, 1004, parseColor(value));
+                        break;
+                    case 33:
+                        colorConfigPush(&levelData->colorConfig, 1, parseColor(value));
+                        break;
+                    case 34:
+                        colorConfigPush(&levelData->colorConfig, 2, parseColor(value));
+                        break;
+                    case 35:
+                        colorConfigPush(&levelData->colorConfig, 3, parseColor(value));
+                        break;
+                    case 36:
+                        colorConfigPush(&levelData->colorConfig, 4, parseColor(value));
+                        break;
+                    case 37:
+                        colorConfigPush(&levelData->colorConfig, 1003, parseColor(value));
+                        break;
+                    case 38:
+                        processColorString(&levelData->colorConfig, value);
+                        break;
+                    default:
+                        SYS_Report("Warning: Unhandled level data key %s\n", key);
+                        break;
+                }
+                break;
+            }
+
+            default:
+                SYS_Report("Warning: Unhandled level data key %s\n", key);
+                break;
+        }
+    } while (!last);
+
+    *levelStringPtr = levelString;
+}
+
 LevelObject* GDL_ParseLevelString(char* levelString, int* size, ObjectData* dataObjects, LevelData* levelData) {
     int objectsCapacity = 100;
     LevelObject* objects = malloc(objectsCapacity * sizeof(LevelObject));
@@ -218,166 +421,7 @@ LevelObject* GDL_ParseLevelString(char* levelString, int* size, ObjectData* data
     levelData->colorConfig.length = 0;
 
     // Skip level settings (for now)
-    do {
-        char* levelDataString = getNextData(levelString, &length, &levelString, &last);
-        // levelData[length] = '\0';
-        assert(levelDataString[0] == 'k');
-        char val1 = levelDataString[1];
-        int val2 = atoi(&levelDataString[2]);
-        
-        char* value = getNextData(levelString, &length, &levelString, &last);
-        // value[length] = '\0';
-        // SYS_Report("val1: %c, val2: %d\n", val1, val2);
-        // SYS_Report("level data object: %s, %s\n", levelDataString, value);
-        switch (val1){
-            case 'A':
-                int ival = atoi(value);
-                f32 fval = atof(value);
-                switch (val2){
-                    case 2:
-                        levelData->gamemode = ival;
-                    break;
-                    case 3:
-                        levelData->minimode = ival;
-                    break;
-                    case 4:
-                        levelData->speed = ival;
-                    break;
-                    case 5:
-                        levelData->obj2Blending = ival;
-                    break;
-                    case 6:
-                        levelData->BGTexId = ival;
-                    break;
-                    case 7:
-                        levelData->groundTexId = ival;
-                    break;
-                    case 8:
-                        levelData->dualMode = ival;
-                    break;
-                    case 9:
-                        levelData->startPosObj = ival;
-                    break;
-                    case 10:
-                        levelData->multiPlayerMode = ival;
-                    break;
-                    case 11:
-                        levelData->flipGravity = ival;
-                    break;
-                    case 13:
-                        levelData->songOffset = fval;
-                    break;
-                    case 14:
-                        // levelData.guideline = value
-                    break;
-                    case 15:
-                        levelData->fadeIn = ival;
-                    break;
-                    case 16:
-                        levelData->fadeOut = ival;
-                    break;
-                    case 17:
-                        levelData->groundLineId = ival;
-                    break;
-                    case 18:
-                        levelData->font = ival;
-                    break;
-                    case 20:
-                        levelData->reverseMode = ival;
-                    break;
-                    case 22:
-                        levelData->platformerMode = ival;
-                    break;
-                    case 25:
-                        levelData->middlegroundTexId = ival;
-                    break;
-                    case 28:
-                        levelData->mirrorMode = ival;
-                    break;
-                    case 29:
-                        levelData->rotateGameplay = ival;
-                    break;
-                }
-            break;
-
-            case 'S':
-                u32 R = 1000;
-                u32 G = 1000;
-                u32 B = 1000;
-                char* val3 = strtok(value, "_");
-                while(val3){
-                    
-                    char* val4 = strtok(NULL, "_");
-
-                    switch (atoi(val3)){
-                        case 1:
-                            R = (u8)atoi(val4) << 24;
-                        break;
-                        case 2:
-                            G = (u8)atoi(val4) << 16;
-                        break;
-                        case 3:
-                            B = (u8)atoi(val4) << 8;
-                        break;
-                    }
-
-                    val3 = strtok(NULL, "_");
-                }
-                if(R == 1000 || G == 1000 || B == 1000){
-                    break;
-                }
-                Color color = {
-                    // .color = ((u32)R << 24) + ((u32)G << 16) + ((u32)B << 8) + 0xff,
-                    .color = R + G + B + 0xff,
-                    false
-                };
-                int channelId = -1;
-                switch (val2){
-                    case 29:
-                        channelId = 1000;
-                    break;
-
-                    case 30:
-                        channelId = 1001;
-                    break;
-                    case 31:
-
-                        channelId = 1002;
-                    break;
-                    
-                    case 32:
-                        channelId = 1004;
-                    break;
-                    
-                    case 33:
-                        channelId = 1;
-                    break;
-                    
-                    case 34:
-                        channelId = 2;
-                    break;
-                    
-                    case 35:
-                        channelId = 3;
-                    break;
-                    
-                    case 36:
-                        channelId = 4;
-                    break;
-                    
-                    case 37:
-                        channelId = 1003;
-                    break;
-                }
-                if(channelId == -1){
-                    break;
-                }
-                levelData->colorConfig.colors[levelData->colorConfig.length] = (ColorData){channelId, color};
-                levelData->colorConfig.length++;
-            break;
-        
-        }
-    } while (!last);
+    parseLevelData(levelString, &levelString, levelData);
 
     // Parse level objects
     do {
@@ -462,7 +506,7 @@ LevelObject* GDL_ParseLevelString(char* levelString, int* size, ObjectData* data
                     object.is_trigger = ival;
                     break;
                 default:
-                    SYS_Report("Unknown key %d\n", key);
+                    // SYS_Report("Unknown key %d\n", key);
                     break;
             }
         }
