@@ -19,6 +19,8 @@
 #include "../gfx.h"
 #include "menu.h"
 #include "../parse/levelinfo.h"
+#include "../effects/particles.h"
+#include "../effects/streak.h"
 
 static void levelEnter();
 static void levelExit();
@@ -86,6 +88,79 @@ static FILE* music;
 static f32 camX;
 static f32 camY;
 static f32 backgroundPosition;
+
+//effects
+static const ParticleEmitter dragEffect = {
+    .lifetime = 0.35f,
+    .lifetimeVar = 0.15f,
+    .speed = 40.0f,
+    .speedVar = 20.0f,
+    .angle = 120.0f,
+    .angleVar = 30.0f,
+    .posVarX = 2.0f,
+    .posVarY = 1.0f,
+    .startSize = 4.0f,
+    .startSizeVar = 2.0f,
+    .endSize = 1.0f,
+    .startColor = 0xffffffff,
+    .endColor = 0xffffff00,
+    .rate = 40.0f,
+    .colorChannel = 1011,
+    .additive = true
+};
+static f32 dragEmitTimer;
+static const ParticleEmitter landEffect = {
+    .lifetime = 0.25f,
+    .lifetimeVar = 0.1f,
+    .speed = 60.0f,
+    .speedVar = 30.0f,
+    .angle = 90.0f,
+    .angleVar = 70.0f,
+    .posVarX = 12.0f,
+    .gravityY = -300.0f,
+    .startSize = 4.0f,
+    .startSizeVar = 1.5f,
+    .endSize = 1.0f,
+    .startColor = 0xffffffff,
+    .endColor = 0xffffff00,
+    .colorChannel = 1011,
+    .additive = true
+};
+static const ParticleEmitter shipFireEffect = {
+    .lifetime = 0.2f,
+    .lifetimeVar = 0.08f,
+    .speed = 30.0f,
+    .speedVar = 15.0f,
+    .angle = 180.0f,
+    .angleVar = 25.0f,
+    .posVarX = 1.0f,
+    .posVarY = 2.0f,
+    .startSize = 4.0f,
+    .startSizeVar = 1.5f,
+    .endSize = 1.5f,
+    .startColor = 0xffffc8ff,
+    .endColor = 0xff320000,
+    .rate = 80.0f
+};
+static f32 shipFireTimer;
+// Squares floating around the whole screen during ship sections
+static const ParticleEmitter shipAmbientEffect = {
+    .lifetime = 1.5f,
+    .lifetimeVar = 0.5f,
+    .speed = 35.0f,
+    .speedVar = 10.0f,
+    .angle = 205.0f,
+    .angleVar = 15.0f,
+    .posVarX = 284.0f,
+    .posVarY = 150.0f,
+    .startSize = 5.0f,
+    .startSizeVar = 2.0f,
+    .endSize = 2.0f,
+    .startColor = 0xffe650ff,
+    .endColor = 0xff500000,
+    .rate = 10.0f
+};
+static f32 shipAmbientTimer;
 
 static f32 lastX;
 static bool screenFlipped = false;
@@ -569,6 +644,13 @@ void levelInit(){
     player.velX = playerSpeeds[levelData.speed];
     colorInit(levelData.colorConfig);
 
+    //effects
+    PTC_Reset();
+    STK_Reset();
+    dragEmitTimer = 0.0f;
+    shipFireTimer = 0.0f;
+    shipAmbientTimer = 0.0f;
+
     player.gamemode = levelData.gamemode;
     screenFlipped = levelData.mirrorMode;
     mirrored = levelData.mirrorMode;
@@ -683,6 +765,7 @@ static void updateVisibility() {
 
 static void update(f32 dt) {
     lastX = player.x;
+    bool landed = false;
 
     f32 deltaFrames = dt * 60.0f;
     if (deltaFrames > 2.0f) {
@@ -691,8 +774,12 @@ static void update(f32 dt) {
 
     f32 step = deltaFrames / 4.0f;
     for (int i = 0; i < 4; i++) {
+        bool wasGrounded = player.grounded;
         playerUpdate(&player, step);
         checkCollisions(&player, step);
+        if (!wasGrounded && player.grounded) {
+            landed = true;
+        }
     }
 
     // A press can only activate an orb during the frame it happened
@@ -702,7 +789,30 @@ static void update(f32 dt) {
     updateCamera(&player);
     updateMirror(dt);
     updateVisibility();
-    // updateColorChannels(dt);
+    
+    //effects
+    if (player.gamemode == GAMEMODE_CUBE && landed && !player.dead) {
+        f32 halfSize = 15.0f * player.scale;
+        PTC_Emit(&landEffect, player.x, player.y - halfSize * player.gravityModifier, player.gravityFlipped, 10);
+    }
+    if (player.gamemode == GAMEMODE_CUBE && player.grounded && !player.dead) {
+        f32 halfSize = 15.0f * player.scale;
+        PTC_EmitContinuous(&dragEffect, &dragEmitTimer, player.x - halfSize, player.y - halfSize * player.gravityModifier, player.gravityFlipped, dt);
+    }
+    if (player.gamemode == GAMEMODE_SHIP && !player.dead) {
+        // Back of the ship, rotated with the sprite (positive rotation is clockwise)
+        f32 angle = player.rotation * (M_PI / 180.0f);
+        f32 localX = -16.0f * player.scale;
+        f32 localY = -3.0f * player.scale * player.gravityModifier;
+        f32 backX = player.x + localX * cosf(angle) + localY * sinf(angle);
+        f32 backY = player.y - localX * sinf(angle) + localY * cosf(angle);
+
+        PTC_EmitContinuous(&shipFireEffect, &shipFireTimer, backX, backY, player.gravityFlipped, dt);
+        PTC_EmitContinuous(&shipAmbientEffect, &shipAmbientTimer, camX, (player.groundTop + player.groundBottom) / 2.0f, false, dt);
+        STK_AddPoint(backX, backY);
+    }
+    PTC_Update(dt);
+    STK_Update(dt);
 }
 
 static void levelRun(f32 deltaTime) {
@@ -1025,6 +1135,9 @@ static void levelRender() {
         }
     }
     i = itoreturnto;//return back to where i should be
+
+    STK_Draw(view, camX, mirrorScale);
+    PTC_Draw(view, camX, mirrorScale);
   
     SpriteInfo playerSprite = {
         .x = camX + (player.x - camX) * mirrorScale,

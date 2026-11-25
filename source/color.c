@@ -84,7 +84,7 @@ Color getColorChannel(int channel) {
     return colors[channel];
 }
 
-static u32 lerpColor(u32 from, u32 to, f32 t) {
+u32 lerpColor(u32 from, u32 to, f32 t) {
     u32 result = 0;
     for (int shift = 0; shift < 32; shift += 8) {
         s32 a = (from >> shift) & 0xff;

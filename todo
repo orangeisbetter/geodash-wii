@@ -13,8 +13,8 @@
 [ ] sprite transform order (rotate, flip)
 [ ] progress bar
 [X] main screen animation
-[ ] upsidedown ships textures
+[ ] upsidedown ships textures as well as cube showing up in ship
 [ ] other modes
 [X] pads
-[ ] glow effects
-[X] add/fix ship top ground
+[X] glow effects (checking it off but haven't done children glow yet. do they need it?)
+[X] add/fix ship top ground (this does work but it should be a smooth transition)

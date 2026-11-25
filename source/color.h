@@ -20,9 +20,9 @@ typedef struct {
 void colorInit(ColorConfig colorConfig);
 
 Color getColorChannel(int channel);
-
 void setColorChannel(int channel, Color newColor, f32 duration);
 
 void updateColorChannels(f32 dt);
+u32 lerpColor(u32 from, u32 to, f32 t);
 
 void colorConfigPush(ColorConfig* config, int channel, Color color);
