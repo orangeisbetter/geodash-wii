@@ -40,6 +40,9 @@ static inline void GFX_ResetDrawMode() {
     // Basic TEV setup - outputcolor = inputcolor * texcolor
     GX_SetNumChans(1);
     GX_SetNumTexGens(7);
+    for (u8 i = 0; i < 7; i++) {
+        GX_SetTexCoordGen(GX_TEXCOORD0 + i, GX_TG_MTX2x4, GX_TG_TEX0, GX_IDENTITY);
+    }
 
     GX_SetNumTevStages(1);
     GX_SetTevOp(GX_TEVSTAGE0, GX_MODULATE);
@@ -72,6 +75,7 @@ static inline void GFX_LoadTexture(GXTexObj* tex, u8 texmap) {
 }
 
 static inline void GFX_BindTexture(u8 texmap) {
+    GX_SetTexCoordGen(GX_TEXCOORD0 + texmap, GX_TG_MTX2x4, GX_TG_TEX0, GX_IDENTITY);
     GX_SetTevOrder(GX_TEVSTAGE0, GX_TEXCOORD0 + texmap, GX_TEXMAP0 + texmap, GX_COLOR0A0);
 }
 

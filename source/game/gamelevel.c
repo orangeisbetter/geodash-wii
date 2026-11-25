@@ -688,7 +688,11 @@ static void update(f32 dt) {
     // updateColorChannels(dt);
 }
 
+static u64 runTime;
+
 static void levelRun(f32 deltaTime) {
+    u64 runStart = gettime();
+
     u32 pressed = WPAD_ButtonsDown(0);
     if (pressed & WPAD_BUTTON_A) {
         player.holding = true;
@@ -796,28 +800,8 @@ static void levelRun(f32 deltaTime) {
             }
         }
     }
-}
 
-void figureOutPortalOffset(LevelObject* portalObject){
-    //SYS_Report("portal rotation of id %d: %f\n", portalObject->id, portalObject->rotation);
-
-    f32 defaultOffset = 1.0f;
-    switch(portalObject->id){
-        case 45:
-            defaultOffset = 0;
-        break;
-        case 13:
-        case 47:
-            defaultOffset = 2;
-        break;
-    }
-    if(portalObject->rotation == 90.0f){
-        portalObject->x -= defaultOffset;
-    }else if(portalObject->rotation == 270.0f || portalObject->rotation == -90.0f){
-        portalObject->x += defaultOffset;
-    }else{
-        portalObject->y -= defaultOffset;
-    }   
+    runTime = gettime() - runStart;
 }
 
 static void levelRender() {
@@ -958,7 +942,6 @@ static void levelRender() {
             //portals
             LevelObject notObject;
             notObject = *object;
-            figureOutPortalOffset(&notObject);         
             
             ObjectData notObjectDefaults;
             notObjectDefaults = objectDefaults[object->id];
@@ -1062,7 +1045,12 @@ static void levelRender() {
     guMtxTransApply(model, model, 0.0f, offset, 0.0f);
     offset = Font_RenderText(&font, &fontTexture, buf, 16.0f, ALIGN_LEFT, 600.0f, model);
 
-    u64 us = ticks_to_microsecs(lastFrameRender);
+    u64 us = ticks_to_microsecs(runTime);
+    snprintf(buf, 100, "Update: %2lld.%03lld ms", us / 1000, us % 1000);
+    guMtxTransApply(model, model, 0.0f, offset, 0.0f);
+    offset = Font_RenderText(&font, &fontTexture, buf, 16.0f, ALIGN_LEFT, 600.0f, model);
+
+    us = ticks_to_microsecs(lastFrameRender);
     snprintf(buf, 100, "RDR: %2lld.%03lld ms", us / 1000, us % 1000);
     guMtxTransApply(model, model, 0.0f, offset, 0.0f);
     offset = Font_RenderText(&font, &fontTexture, buf, 16.0f, ALIGN_LEFT, 600.0f, model);

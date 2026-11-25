@@ -52,6 +52,7 @@ LIBDIRS	:= $(PORTLIBS)
 ifneq ($(BUILD),$(notdir $(CURDIR)))
 #---------------------------------------------------------------------------------
 
+export TOPDIR	:=	$(CURDIR)
 export OUTPUT	:=	$(CURDIR)/$(TARGET)
 
 export VPATH	:=	$(foreach dir,$(SOURCES),$(CURDIR)/$(dir)) \
@@ -139,6 +140,16 @@ $(OFILES_SOURCES) : $(HFILES)
 #---------------------------------------------------------------------------------
 	@echo $(notdir $<)
 	@$(bin2o)
+
+#---------------------------------------------------------------------------------
+# This rule builds .tpl files from .scf, padding textures to GX tile alignment
+#---------------------------------------------------------------------------------
+%.tpl : %.scf
+#---------------------------------------------------------------------------------
+	@echo $(notdir $<)
+	@mkdir -p .texpad/$(basename $(notdir $<))
+	@python3 $(TOPDIR)/tools/pad_scf_for_gx.py $< -o .texpad/$(basename $(notdir $<))/$(notdir $<) -d .texpad/$(basename $(notdir $<))
+	@cd .texpad/$(basename $(notdir $<)) && $(DEVKITPRO)/tools/bin/gxtexconv -s ./$(notdir $<) -o $(abspath $@)
 
 #---------------------------------------------------------------------------------
 # This rule links in binary data with the .tpl extension
