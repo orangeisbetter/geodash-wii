@@ -93,7 +93,7 @@ static char* getGlowTexture(const char* texture) {
     return glow;
 }
 
-ObjectData* getObjectData(const char* filename) {
+ObjectData* getObjectData(const char* filename, unsigned int* outLength) {
     // read json file into character buffer
     FILE* objectsFile = fopen(filename, "rb");
     fseek(objectsFile, 0, SEEK_END);
@@ -113,11 +113,10 @@ ObjectData* getObjectData(const char* filename) {
 
     for (cJSON* item = objectsJson->child; item != NULL; item = item->next) {
         long id = strtol(item->string, NULL, 10);
-        if (id > arraySize) {
-            arraySize = id;
+        if (arraySize < id + 1) {
+            arraySize = id + 1;
         }
     }
-    arraySize++;
 
     ObjectData* objects = calloc(arraySize, sizeof(ObjectData));
 
@@ -216,6 +215,8 @@ ObjectData* getObjectData(const char* filename) {
     //         }
     //     }
     // }
+
+    *outLength = arraySize;
 
     return objects;
 }
