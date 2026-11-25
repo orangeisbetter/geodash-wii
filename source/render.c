@@ -397,6 +397,25 @@ static int compareSprite(const void* a, const void* b) {
     return ((RenderObject*)a)->z - ((RenderObject*)b)->z;
 }
 
+static void getLevelObjectTransform(Mtx out, const LevelObject* object, bool flipped, const Mtx pre) {
+    static guVector front = { 0.0f, 0.0f, -1.0f };
+
+    // Flip
+    guMtxScale(out, object->flipx ? -1.0f : 1.0f, object->flipy ? -1.0f : 1.0f, 1.0f);
+    // Rotate
+    Mtx temp;
+    guMtxRotAxisDeg(temp, &front, object->rotation);
+    guMtxConcat(temp, out, out);
+    // Flip again if necessary
+    if (flipped) {
+        guMtxScaleApply(out, out, -1.0f, 1.0f, 1.0f);
+    }
+    // "Model" matrix
+    guMtxConcat(pre, out, out);
+    // Translate
+    guMtxTransApply(out, out, object->x, object->y, 0.0f);
+}
+
 void RDR_drawLevelObject(const LevelObject* object, const ObjectData* objectClass, bool flipped, u8 alpha, const Mtx pre, const Mtx view) {
     static RenderObject* sprites = NULL;
     static int capacity = 10;
@@ -456,20 +475,7 @@ void RDR_drawLevelObject(const LevelObject* object, const ObjectData* objectClas
 
     static guVector front = { 0.0f, 0.0f, -1.0f };
 
-    // Flip
-    guMtxScale(parent->transform, object->flipx ? -1.0f : 1.0f, object->flipy ? -1.0f : 1.0f, 1.0f);
-    // Rotate
-    Mtx temp;
-    guMtxRotAxisDeg(temp, &front, object->rotation);
-    guMtxConcat(temp, parent->transform, parent->transform);
-    // Flip again if necessary
-    if (flipped) {
-        guMtxScaleApply(parent->transform, parent->transform, -1.0f, 1.0f, 1.0f);
-    }
-    // "Model" matrix
-    guMtxConcat(pre, parent->transform, parent->transform);
-    // Translate
-    guMtxTransApply(parent->transform, parent->transform, object->x, object->y, 0.0f);
+    getLevelObjectTransform(parent->transform, object, flipped, pre);
 
     for (int i = 0; i < objectClass->numChildren; i++) {
         ObjectDataChild* child = &objectClass->children[i];
@@ -502,6 +508,7 @@ void RDR_drawLevelObject(const LevelObject* object, const ObjectData* objectClas
                     sprite->color.blending = false;
                     break;
             }
+            // sprite->color.color = (parent->color.color & 0xffffff00) | ((parent->color.color & 0xff) * alpha) >> 8; get back to later
         }
 
         // Flip
@@ -520,6 +527,21 @@ void RDR_drawLevelObject(const LevelObject* object, const ObjectData* objectClas
     for (int i = 0; i < size; i++) {
         RDR_drawRenderObject(&sprites[i], false, view);
     }
+}
+
+void RDR_drawLevelObjectGlow(const LevelObject* object, const ObjectData* objectClass, bool flipped, u8 alpha, const Mtx pre, const Mtx view) {
+    if (!objectClass->glow) {
+        return;
+    }
+
+    RenderObject glow;
+    glow.tex = ht_search(objectClass->glow);
+    glow.usemtx = true;
+    glow.color.color = 0xffffff00 | alpha;
+    glow.color.blending = false;
+    getLevelObjectTransform(glow.transform, object, flipped, pre);
+
+    RDR_drawRenderObject(&glow, false, view);
 }
 
 void RDR_drawRect(GXTexObj* tex, f32 x, f32 y, f32 w, f32 h, u32 color) {

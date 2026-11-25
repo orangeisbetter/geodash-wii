@@ -92,9 +92,9 @@ static f32 mirrorProgress = 0.0f;
 static const f32 mirrorTransitionTime = 0.5f;
 static bool mirrored = false;
 
-// Horizontal speed in units per second, indexed by Speed (level setting kA4 / speed portals)
-static const f32 playerSpeeds[] = { 311.58f / 54, 251.16f / 54, 387.42f / 54, 468.0f / 54, 576.0f / 54 };
 static const f32 baseSpeed = 5.770002f;
+// Horizontal speed in units per second, indexed by Speed (level setting kA4 / speed portals) (first one 311.58f)
+static const f32 playerSpeeds[] = { baseSpeed, 251.16f / 54, 387.42f / 54, 468.0f / 54, 576.0f / 54 };
 
 // Ball spin in degrees per unit travelled (measured from the original game)
 static const f32 ballSpinPerUnit = 1.85f;
@@ -271,7 +271,11 @@ int getCollisionType(const LevelObject* object) {
         // case 1704: //dashRing_01_001.png
         // case 1751: //dashRing_02_001.png
             return ORB;
+        case 200:
+        case 201:
         case 202:
+        case 203:
+        case 1334:
             return BOOST;
         default:
             return NONE; // no collision
@@ -469,10 +473,23 @@ void checkCollisions(Player* player, float dt) {
                     break;
                 case BOOST:
                     switch(object->id){
+                        case 200:
+                            player->velX = playerSpeeds[1];
+                        break;
+                        case 201:
+                            player->velX = playerSpeeds[0];
+                        break;
                         case 202:
                             player->velX = playerSpeeds[2];
                         break;
+                        case 203:
+                            player->velX = playerSpeeds[3];
+                        break;
+                        case 1334:
+                            player->velX = playerSpeeds[4];
+                        break;
                     }
+                break;
                 default:
                     playerCollideWithObject(player, object, &objectDefaults[object->id]);
                     break;
@@ -548,7 +565,7 @@ void levelInit(){
     mirrorProgress = 0.0f;
 
     playerInit(&player);
-
+    player.velX = playerSpeeds[levelData.speed];
     colorInit(levelData.colorConfig);
 
     player.gamemode = levelData.gamemode;
@@ -819,6 +836,34 @@ void figureOutPortalOffset(LevelObject* portalObject){
     }   
 }
 
+// Edge fade and mirror offset for an object, returns its alpha
+static u8 getObjectModel(const LevelObject* object, f32 mirrorScale, Mtx model) {
+    f32 viewBoundsL = camX - (view_width / 2.0f) / viewScale;
+    f32 viewBoundsR = camX + (view_width / 2.0f) / viewScale;
+    f32 fadeBoundsL = viewBoundsL + 90.0f;
+    f32 fadeBoundsR = viewBoundsR - 90.0f;
+
+    f32 scale = 1.0f;
+    u8 alpha = 255;
+
+    if (object->x < fadeBoundsL) {
+        f32 factor = (fadeBoundsL - object->x) / (fadeBoundsL - viewBoundsL);
+        alpha = 255 * (1.0f - factor);
+        scale = 1.0f - factor;
+    }
+    if (object->x > fadeBoundsR) {
+        f32 factor = (object->x - fadeBoundsR) / (viewBoundsR - fadeBoundsR);
+        alpha = 255 * (1.0f - factor);
+        scale = 1.0f - factor;
+    }
+
+    f32 x = (object->x - camX) * (mirrorScale - 1.0f);
+
+    guMtxScale(model, scale, scale, 1.0f);
+    guMtxTransApply(model, model, x, 0.0f, 0.0f);
+    return alpha;
+}
+
 static void levelRender() {
     f32 mirrorScale = cosf(mirrorProgress * M_PI);
     mirrored = mirrorScale < 0.0f;
@@ -906,6 +951,14 @@ static void levelRender() {
     GFX_LoadTexture(&gameSheetIcons, GX_TEXMAP4);
     GFX_LoadTexture(&gameSheetGlow, GX_TEXMAP5);
 
+    // Glow goes under every object
+    for (int j = 0; j < sortBuffer.size; j++) {
+        const LevelObject* object = sortBuffer.objects[j];
+        Mtx model;
+        u8 alpha = getObjectModel(object, mirrorScale, model);
+        RDR_drawLevelObjectGlow(object, &objectDefaults[object->id], mirrored, alpha, model, view);
+    }
+
     int i = 0;
     int itoreturnto = 0;
     for (; i < sortBuffer.size; i++) {
@@ -951,7 +1004,7 @@ static void levelRender() {
             //portals
             LevelObject notObject;
             notObject = *object;
-            figureOutPortalOffset(&notObject);         
+            //figureOutPortalOffset(&notObject);         
             
             ObjectData notObjectDefaults;
             notObjectDefaults = objectDefaults[object->id];

@@ -7,6 +7,8 @@
 #include <gccore.h>
 #include <stdlib.h>
 
+#include "../util/hash_table.h"
+
 #define JSON_BOOL(obj, key, target)                                  \
     do {                                                             \
         cJSON* tmp = cJSON_GetObjectItemCaseSensitive((obj), (key)); \
@@ -64,6 +66,33 @@ int streq(const char* a, const char* b) {
     return 0;
 }
 
+// "square_01_001.png" -> "square_01_glow_001.png", or NULL if no glow sprite exists
+static char* getGlowTexture(const char* texture) {
+    const char* suffix = "_001.png";
+    size_t length = strlen(texture);
+    size_t suffixLength = strlen(suffix);
+
+    if (length < suffixLength || strcmp(texture + length - suffixLength, suffix) != 0) {
+        return NULL;
+    }
+
+    // + "_glow" + '\0'
+    char* glow = malloc(length + 6);
+    if (!glow) {
+        SYS_Report(__FILE__ ":%d: Could not allocate memory!\n", __LINE__);
+        return NULL;
+    }
+
+    memcpy(glow, texture, length - suffixLength);
+    strcpy(glow + length - suffixLength, "_glow_001.png");
+
+    if (!ht_search(glow)) {
+        free(glow);
+        return NULL;
+    }
+    return glow;
+}
+
 ObjectData* getObjectData(const char* filename) {
     // read json file into character buffer
     FILE* objectsFile = fopen(filename, "rb");
@@ -98,6 +127,9 @@ ObjectData* getObjectData(const char* filename) {
         object->exists = true;
 
         JSON_STRING(item, "texture", object->texture);
+        if (object->texture) {
+            object->glow = getGlowTexture(object->texture);
+        }
         JSON_INT(item, "default_z_layer", object->default_z_layer);
         JSON_INT(item, "default_z_order", object->default_z_order);
         JSON_INT(item, "default_base_color_channel", object->default_base_color_channel);
@@ -154,8 +186,9 @@ ObjectData* getObjectData(const char* filename) {
         }
     }
 
-    cJSON_free(objectsJson);
-
+    // cJSON_free(objectsJson);
+    cJSON_Delete(objectsJson);//should be this
+ 
     // for (int i = 0; i < arraySize; i++) {
     //     if (objects[i].exists == true) {
     //         SYS_Report("Texture for id %d: %s\n", i, objects[i].texture);

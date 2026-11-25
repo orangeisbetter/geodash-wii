@@ -128,6 +128,7 @@ void setColorChannel(int channel, Color newColor, f32 duration) {
     // the number of slots
     if (slotIndex == -1) {
         colors[channel].color = newColor.color;
+        return;
     }
 
     // Initialize transition info

@@ -215,7 +215,7 @@ LevelObject* GDL_ParseLevelString(char* levelString, int* size, ObjectData* data
     int length;
     bool last;
 
-    levelData->colorConfig.length = 0;
+    *levelData = (LevelData){ 0 };
 
     // Skip level settings (for now)
     do {

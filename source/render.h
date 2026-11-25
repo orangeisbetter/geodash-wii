@@ -70,4 +70,5 @@ void RDR_drawSpriteFromMap(texture_info* tex, SpriteInfo* sprite, int colorChann
 void RDR_drawSpriteFromMap2(texture_info* tex, SpriteInfo* sprite, u32 color, bool blending, Mtx view);
 void RDR_drawRenderObject(RenderObject* object, bool flipped, const Mtx view);
 void RDR_drawLevelObject(const LevelObject* object, const ObjectData* objectClass, bool flipped, u8 alpha, const Mtx model, const Mtx view);
+void RDR_drawLevelObjectGlow(const LevelObject* object, const ObjectData* objectClass, bool flipped, u8 alpha, const Mtx pre, const Mtx view);
 void RDR_drawRect(GXTexObj* tex, f32 x, f32 y, f32 w, f32 h, u32 color);

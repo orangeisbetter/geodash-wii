@@ -51,6 +51,7 @@ typedef struct {
     int numChildren;
     ObjectDataChild* children;
     Hitbox hitbox;
+    char* glow;
 } ObjectData;
 
 ObjectData* getObjectData(const char* filename);
