@@ -24,3 +24,5 @@ Color getColorChannel(int channel);
 void setColorChannel(int channel, Color newColor, f32 duration);
 
 void updateColorChannels(f32 dt);
+
+void colorConfigPush(ColorConfig* config, int channel, Color color);

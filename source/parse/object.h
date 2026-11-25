@@ -54,6 +54,6 @@ typedef struct {
     char* glow;
 } ObjectData;
 
-ObjectData* getObjectData(const char* filename);
+ObjectData* getObjectData(const char* filename, unsigned int* outLength);
 
 char* isPortalId(int id);
