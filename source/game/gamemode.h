@@ -8,5 +8,6 @@ typedef enum {
     GAMEMODE_WAVE,
     GAMEMODE_ROBOT,
     GAMEMODE_SPIDER,
-    GAMEMODE_SWING
+    GAMEMODE_SWING,
+    GAMEMODE_COUNT
 } Gamemode;

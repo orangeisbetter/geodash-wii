@@ -11,6 +11,7 @@
 
 #include "gamemode.h"
 #include "Player.h"
+#include "physics.h"
 #include "../util/sort.h"
 #include "../constants.h"
 #include "../parse/level.h"
@@ -168,24 +169,17 @@ static f32 mirrorProgress = 0.0f;
 static const f32 mirrorTransitionTime = 0.5f;
 static bool mirrored = false;
 
-static const f32 baseSpeed = 5.770002f;
-// Horizontal speed in units per second, indexed by Speed (level setting kA4 / speed portals) (first one 311.58f)
-static const f32 playerSpeeds[] = { baseSpeed, 251.16f / 54, 387.42f / 54, 468.0f / 54, 576.0f / 54 };
+static Speed getPlayerSpeed(const Player* player) {
+    return player->speed;
+}
 
-// Ball spin in degrees per unit travelled (measured from the original game)
-static const f32 ballSpinPerUnit = 1.85f;
+static f32 getPadVelocity(const Player* player, PadType pad) {
+    return velPads[player->gamemode][getPlayerSpeed(player)][pad];
+}
 
-static const f32 velCubeJump = 1.94f;
-static const f32 velYellowPad = 2.77f;
-static const f32 velPinkPad = 1.79f;
-// static const f32 velRedPad = 3.65f;
-static const f32 velBluePad = -1.37f;
-static const f32 velYellowOrb = 1.91f;
-static const f32 velPinkOrb = 1.37f;
-// static const f32 velRedOrb = 2.68f;
-static const f32 velBlueOrb = -1.37f;
-// static const f32 velGreenOrb = -1.91f;
-// static const f32 velBlackOrb = -2.6f;
+static f32 getOrbVelocity(const Player* player, OrbType orb) {
+    return velOrbs[player->gamemode][getPlayerSpeed(player)][orb];
+}
 
 static const f32 cameraVerticalBounds_2 = 75.0f;
 
@@ -194,8 +188,6 @@ Player player = { 0 };
 static LevelData levelData;
 static LevelObject* objects;
 static int objectsSize;
-
-static RenderCache renderCache = { 0 };
 
 static struct {
     const LevelObject** objects;
@@ -347,11 +339,11 @@ int getCollisionType(const LevelObject* object) {
         // case 1704: //dashRing_01_001.png
         // case 1751: //dashRing_02_001.png
             return ORB;
-        case 200:
-        case 201:
-        case 202:
-        case 203:
-        case 1334:
+        case 200: // slow speed portal
+        case 201: // normal speed portal
+        case 202: // faster speed portal
+        case 203: // fast speed portal
+        case 1334: // fastest speed portal
             return BOOST;
         default:
             return NONE; // no collision
@@ -367,12 +359,6 @@ static bool objectIsUpsideDown(const LevelObject* object) {
     bool rotated = rotation > 90.0f && rotation < 270.0f;
 
     return object->flipy != rotated;
-}
-
-static bool objectIsHorizontal(const LevelObject* object) {
-    // Rotated a quarter turn either way (90 or 270 degrees)
-    f32 rotation = fmodf(fabsf(object->rotation), 180.0f);
-    return rotation > 45.0f && rotation < 135.0f;
 }
 
 void flipScreen(bool state) {
@@ -509,7 +495,7 @@ void checkCollisions(Player* player, float dt) {
                     // SYS_Report("padid: %d\n", object->id);
                     switch(object->id){
                         case 35:
-                            playerPadJump(player, velYellowPad * baseSpeed);
+                            playerPadJump(player, getPadVelocity(player, PAD_YELLOW));
                         break;
                         case 67:
                             //SYS_Report("pad rotation: %d\n", object->flipy);
@@ -518,11 +504,12 @@ void checkCollisions(Player* player, float dt) {
                             }else{
                                 flipGravity(player, true, false);
                             }
-                            playerPadJump(player, velBluePad * player->velX);
+                            // flipGravity() already inverted gravityModifier; playerPadJump() applies it again.
+                            playerPadJump(player, -getPadVelocity(player, PAD_BLUE));
                             //SYS_Report("velocity after: %f\n", player->velY);
                         break;
                         case 140:
-                            playerPadJump(player, velPinkPad * baseSpeed);
+                            playerPadJump(player, getPadVelocity(player, PAD_PINK));
                         break;
                     }
                     object->activated = true;
@@ -534,35 +521,36 @@ void checkCollisions(Player* player, float dt) {
                     // SYS_Report("orbid: %d\n", object->id);
                     switch(object->id){
                         case 36:
-                            playerRingJump(player, velYellowOrb * baseSpeed, object);
+                            playerRingJump(player, getOrbVelocity(player, ORB_YELLOW), object);
                         break;
                         case 84:
                         if (player->queuedHold) {
                             flipGravity(player, !player->gravityFlipped, false);
-                            playerRingJump(player, velBlueOrb * player->velX, object);
+                            // flipGravity() already inverted gravityModifier; playerRingJump() applies it again.
+                            playerRingJump(player, -getOrbVelocity(player, ORB_BLUE), object);
                         }
                         break;
                         case 141:
-                            playerRingJump(player, velPinkOrb * baseSpeed, object);                          
+                            playerRingJump(player, getOrbVelocity(player, ORB_PINK), object);
                         break;
                     }
                     break;
                 case BOOST:
                     switch(object->id){
                         case 200:
-                            player->velX = playerSpeeds[1];
+                            playerSetSpeed(player, SPEED_HALF, playerSpeeds[SPEED_HALF]);
                         break;
                         case 201:
-                            player->velX = playerSpeeds[0];
+                            playerSetSpeed(player, SPEED_ONE, playerSpeeds[SPEED_ONE]);
                         break;
                         case 202:
-                            player->velX = playerSpeeds[2];
+                            playerSetSpeed(player, SPEED_TWO, playerSpeeds[SPEED_TWO]);
                         break;
                         case 203:
-                            player->velX = playerSpeeds[3];
+                            playerSetSpeed(player, SPEED_THREE, playerSpeeds[SPEED_THREE]);
                         break;
                         case 1334:
-                            player->velX = playerSpeeds[4];
+                            playerSetSpeed(player, SPEED_FOUR, playerSpeeds[SPEED_FOUR]);
                         break;
                     }
                 break;
@@ -641,7 +629,13 @@ void levelInit(){
     mirrorProgress = 0.0f;
 
     playerInit(&player);
-    player.velX = playerSpeeds[levelData.speed];
+    int rawSpeed = (int)levelData.speed;
+    if (rawSpeed < (int)SPEED_ONE || rawSpeed >= SPEED_COUNT) {
+        rawSpeed = SPEED_ONE;
+    }
+    Speed startSpeed = (Speed)rawSpeed;
+    playerSetSpeed(&player, startSpeed, playerSpeeds[startSpeed]);
+
     colorInit(levelData.colorConfig);
 
     //effects
@@ -763,6 +757,8 @@ static void updateMirror(f32 dt){
 static void updateVisibility() {
 }
 
+static u64 playerUpdateTime;
+
 static void update(f32 dt) {
     lastX = player.x;
     bool landed = false;
@@ -771,6 +767,8 @@ static void update(f32 dt) {
     if (deltaFrames > 2.0f) {
         deltaFrames = 2.0f;
     }
+
+    u64 updateStart = gettime();
 
     f32 step = deltaFrames / 4.0f;
     for (int i = 0; i < 4; i++) {
@@ -781,6 +779,8 @@ static void update(f32 dt) {
             landed = true;
         }
     }
+
+    playerUpdateTime = gettime() - updateStart;
 
     // A press can only activate an orb during the frame it happened
     // player.queuedHold = false; apparently actually this is allowed
@@ -815,7 +815,11 @@ static void update(f32 dt) {
     STK_Update(dt);
 }
 
+static u64 runTime;
+
 static void levelRun(f32 deltaTime) {
+    u64 runStart = gettime();
+
     u32 pressed = WPAD_ButtonsDown(0);
     if (pressed & WPAD_BUTTON_A) {
         player.holding = true;
@@ -923,28 +927,36 @@ static void levelRun(f32 deltaTime) {
             }
         }
     }
+
+    runTime = gettime() - runStart;
 }
 
-void figureOutPortalOffset(LevelObject* portalObject){
-    //SYS_Report("portal rotation of id %d: %f\n", portalObject->id, portalObject->rotation);
+// Edge fade and mirror offset for an object, returns its alpha
+static u8 getObjectModel(const LevelObject* object, f32 mirrorScale, Mtx model) {
+    f32 viewBoundsL = camX - (view_width / 2.0f) / viewScale;
+    f32 viewBoundsR = camX + (view_width / 2.0f) / viewScale;
+    f32 fadeBoundsL = viewBoundsL + 90.0f;
+    f32 fadeBoundsR = viewBoundsR - 90.0f;
 
-    f32 defaultOffset = 1.0f;
-    switch(portalObject->id){
-        case 45:
-            defaultOffset = 0;
-        break;
-        case 13:
-        case 47:
-            defaultOffset = 2;
-        break;
+    f32 scale = 1.0f;
+    u8 alpha = 255;
+
+    if (object->x < fadeBoundsL) {
+        f32 factor = (fadeBoundsL - object->x) / (fadeBoundsL - viewBoundsL);
+        alpha = 255 * (1.0f - factor);
+        scale = 1.0f - factor;
     }
-    if(portalObject->rotation == 90.0f){
-        portalObject->x -= defaultOffset;
-    }else if(portalObject->rotation == 270.0f || portalObject->rotation == -90.0f){
-        portalObject->x += defaultOffset;
-    }else{
-        portalObject->y -= defaultOffset;
-    }   
+    if (object->x > fadeBoundsR) {
+        f32 factor = (object->x - fadeBoundsR) / (viewBoundsR - fadeBoundsR);
+        alpha = 255 * (1.0f - factor);
+        scale = 1.0f - factor;
+    }
+
+    f32 x = (object->x - camX) * (mirrorScale - 1.0f);
+
+    guMtxScale(model, scale, scale, 1.0f);
+    guMtxTransApply(model, model, x, 0.0f, 0.0f);
+    return alpha;
 }
 
 // Edge fade and mirror offset for an object, returns its alpha
@@ -1121,7 +1133,6 @@ static void levelRender() {
             //portals
             LevelObject notObject;
             notObject = *object;
-            //figureOutPortalOffset(&notObject);         
             
             ObjectData notObjectDefaults;
             notObjectDefaults = objectDefaults[object->id];
@@ -1228,7 +1239,17 @@ static void levelRender() {
     guMtxTransApply(model, model, 0.0f, offset, 0.0f);
     offset = Font_RenderText(&font, &fontTexture, buf, 16.0f, ALIGN_LEFT, 600.0f, model);
 
-    u64 us = ticks_to_microsecs(lastFrameRender);
+    u64 us = ticks_to_microsecs(runTime);
+    snprintf(buf, 100, "Update: %2lld.%03lld ms", us / 1000, us % 1000);
+    guMtxTransApply(model, model, 0.0f, offset, 0.0f);
+    offset = Font_RenderText(&font, &fontTexture, buf, 16.0f, ALIGN_LEFT, 600.0f, model);
+
+    us = ticks_to_microsecs(playerUpdateTime);
+    snprintf(buf, 100, "Player update (collisions): %2lld.%03lld ms", us / 1000, us % 1000);
+    guMtxTransApply(model, model, 0.0f, offset, 0.0f);
+    offset = Font_RenderText(&font, &fontTexture, buf, 16.0f, ALIGN_LEFT, 600.0f, model);
+
+    us = ticks_to_microsecs(lastFrameRender);
     snprintf(buf, 100, "RDR: %2lld.%03lld ms", us / 1000, us % 1000);
     guMtxTransApply(model, model, 0.0f, offset, 0.0f);
     offset = Font_RenderText(&font, &fontTexture, buf, 16.0f, ALIGN_LEFT, 600.0f, model);
