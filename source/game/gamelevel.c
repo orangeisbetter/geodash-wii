@@ -674,6 +674,8 @@ static void updateMirror(f32 dt){
 static void updateVisibility() {
 }
 
+static u64 playerUpdateTime;
+
 static void update(f32 dt) {
     lastX = player.x;
 
@@ -682,11 +684,15 @@ static void update(f32 dt) {
         deltaFrames = 2.0f;
     }
 
+    u64 updateStart = gettime();
+
     f32 step = deltaFrames / 4.0f;
     for (int i = 0; i < 4; i++) {
         playerUpdate(&player, step);
         checkCollisions(&player, step);
     }
+
+    playerUpdateTime = gettime() - updateStart;
 
     // A press can only activate an orb during the frame it happened
     // player.queuedHold = false; apparently actually this is allowed
@@ -1057,6 +1063,11 @@ static void levelRender() {
 
     u64 us = ticks_to_microsecs(runTime);
     snprintf(buf, 100, "Update: %2lld.%03lld ms", us / 1000, us % 1000);
+    guMtxTransApply(model, model, 0.0f, offset, 0.0f);
+    offset = Font_RenderText(&font, &fontTexture, buf, 16.0f, ALIGN_LEFT, 600.0f, model);
+
+    us = ticks_to_microsecs(playerUpdateTime);
+    snprintf(buf, 100, "Player update (collisions): %2lld.%03lld ms", us / 1000, us % 1000);
     guMtxTransApply(model, model, 0.0f, offset, 0.0f);
     offset = Font_RenderText(&font, &fontTexture, buf, 16.0f, ALIGN_LEFT, 600.0f, model);
 
