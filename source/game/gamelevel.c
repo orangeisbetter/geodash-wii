@@ -11,6 +11,7 @@
 
 #include "gamemode.h"
 #include "Player.h"
+#include "physics.h"
 #include "../util/sort.h"
 #include "../constants.h"
 #include "../parse/level.h"
@@ -93,24 +94,17 @@ static f32 mirrorProgress = 0.0f;
 static const f32 mirrorTransitionTime = 0.5f;
 static bool mirrored = false;
 
-// Horizontal speed in units per second, indexed by Speed (level setting kA4 / speed portals)
-static const f32 playerSpeeds[] = { 311.58f / 54, 251.16f / 54, 387.42f / 54, 468.0f / 54, 576.0f / 54 };
-static const f32 baseSpeed = 5.770002f;
+static Speed getPlayerSpeed(const Player* player) {
+    return player->speed;
+}
 
-// Ball spin in degrees per unit travelled (measured from the original game)
-static const f32 ballSpinPerUnit = 1.85f;
+static f32 getPadVelocity(const Player* player, PadType pad) {
+    return velPads[player->gamemode][getPlayerSpeed(player)][pad];
+}
 
-static const f32 velCubeJump = 1.94f;
-static const f32 velYellowPad = 2.77f;
-static const f32 velPinkPad = 1.79f;
-// static const f32 velRedPad = 3.65f;
-static const f32 velBluePad = -1.37f;
-static const f32 velYellowOrb = 1.91f;
-static const f32 velPinkOrb = 1.37f;
-// static const f32 velRedOrb = 2.68f;
-static const f32 velBlueOrb = -1.37f;
-// static const f32 velGreenOrb = -1.91f;
-// static const f32 velBlackOrb = -2.6f;
+static f32 getOrbVelocity(const Player* player, OrbType orb) {
+    return velOrbs[player->gamemode][getPlayerSpeed(player)][orb];
+}
 
 static const f32 cameraVerticalBounds_2 = 75.0f;
 
@@ -119,8 +113,6 @@ Player player = { 0 };
 static LevelData levelData;
 static LevelObject* objects;
 static int objectsSize;
-
-static RenderCache renderCache = { 0 };
 
 static struct {
     const LevelObject** objects;
@@ -272,7 +264,11 @@ int getCollisionType(const LevelObject* object) {
         // case 1704: //dashRing_01_001.png
         // case 1751: //dashRing_02_001.png
             return ORB;
-        case 202:
+        case 200: // slow speed portal
+        case 201: // normal speed portal
+        case 202: // faster speed portal
+        case 203: // fast speed portal
+        case 1334: // fastest speed portal
             return BOOST;
         default:
             return NONE; // no collision
@@ -288,12 +284,6 @@ static bool objectIsUpsideDown(const LevelObject* object) {
     bool rotated = rotation > 90.0f && rotation < 270.0f;
 
     return object->flipy != rotated;
-}
-
-static bool objectIsHorizontal(const LevelObject* object) {
-    // Rotated a quarter turn either way (90 or 270 degrees)
-    f32 rotation = fmodf(fabsf(object->rotation), 180.0f);
-    return rotation > 45.0f && rotation < 135.0f;
 }
 
 void flipScreen(bool state) {
@@ -430,7 +420,7 @@ void checkCollisions(Player* player, float dt) {
                     // SYS_Report("padid: %d\n", object->id);
                     switch(object->id){
                         case 35:
-                            playerPadJump(player, velYellowPad * baseSpeed);
+                            playerPadJump(player, getPadVelocity(player, PAD_YELLOW));
                         break;
                         case 67:
                             //SYS_Report("pad rotation: %d\n", object->flipy);
@@ -439,11 +429,12 @@ void checkCollisions(Player* player, float dt) {
                             }else{
                                 flipGravity(player, true, false);
                             }
-                            playerPadJump(player, velBluePad * player->velX);
+                            // flipGravity() already inverted gravityModifier; playerPadJump() applies it again.
+                            playerPadJump(player, -getPadVelocity(player, PAD_BLUE));
                             //SYS_Report("velocity after: %f\n", player->velY);
                         break;
                         case 140:
-                            playerPadJump(player, velPinkPad * baseSpeed);
+                            playerPadJump(player, getPadVelocity(player, PAD_PINK));
                         break;
                     }
                     object->activated = true;
@@ -455,23 +446,36 @@ void checkCollisions(Player* player, float dt) {
                     // SYS_Report("orbid: %d\n", object->id);
                     switch(object->id){
                         case 36:
-                            playerRingJump(player, velYellowOrb * baseSpeed, object);
+                            playerRingJump(player, getOrbVelocity(player, ORB_YELLOW), object);
                         break;
                         case 84:
                         if (player->queuedHold) {
                             flipGravity(player, !player->gravityFlipped, false);
-                            playerRingJump(player, velBlueOrb * player->velX, object);
+                            // flipGravity() already inverted gravityModifier; playerRingJump() applies it again.
+                            playerRingJump(player, -getOrbVelocity(player, ORB_BLUE), object);
                         }
                         break;
                         case 141:
-                            playerRingJump(player, velPinkOrb * baseSpeed, object);                          
+                            playerRingJump(player, getOrbVelocity(player, ORB_PINK), object);
                         break;
                     }
                     break;
                 case BOOST:
                     switch(object->id){
+                        case 200:
+                            playerSetSpeed(player, SPEED_HALF, playerSpeeds[SPEED_HALF]);
+                        break;
+                        case 201:
+                            playerSetSpeed(player, SPEED_ONE, playerSpeeds[SPEED_ONE]);
+                        break;
                         case 202:
-                            player->velX = playerSpeeds[2];
+                            playerSetSpeed(player, SPEED_TWO, playerSpeeds[SPEED_TWO]);
+                        break;
+                        case 203:
+                            playerSetSpeed(player, SPEED_THREE, playerSpeeds[SPEED_THREE]);
+                        break;
+                        case 1334:
+                            playerSetSpeed(player, SPEED_FOUR, playerSpeeds[SPEED_FOUR]);
                         break;
                     }
                 default:
@@ -549,6 +553,12 @@ void levelInit(){
     mirrorProgress = 0.0f;
 
     playerInit(&player);
+    int rawSpeed = (int)levelData.speed;
+    if (rawSpeed < (int)SPEED_ONE || rawSpeed >= SPEED_COUNT) {
+        rawSpeed = SPEED_ONE;
+    }
+    Speed startSpeed = (Speed)rawSpeed;
+    playerSetSpeed(&player, startSpeed, playerSpeeds[startSpeed]);
 
     colorInit(levelData.colorConfig);
 
