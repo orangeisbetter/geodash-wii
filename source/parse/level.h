@@ -42,11 +42,11 @@ typedef struct {
 } LevelObject;
 
 typedef enum{
-    ONE,
-    HALF,
-    TWO,
-    THREE,
-    FOUR
+    SPEED_ONE,
+    SPEED_HALF,
+    SPEED_TWO,
+    SPEED_THREE,
+    SPEED_FOUR
 } Speed;
 
 typedef struct{

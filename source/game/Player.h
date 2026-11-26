@@ -28,9 +28,11 @@ typedef struct {
     bool queuedHold;
     bool dead;
     Gamemode gamemode;
+    Speed speed;
 } Player;
 
 Player* playerInit(Player* player);
+void playerSetSpeed(Player* player, Speed speed, float velX);
 bool playerIsFalling(Player* player);
 void playerHitGround(Player* player, bool reverseGravity);
 void playerDestroy(Player* player);
@@ -40,6 +42,6 @@ void playerChangeGamemode(Player* player, Gamemode gamemode);
 void playerChangeToMiniMode(Player* player, bool mini);
 void flipGravity(Player* player, bool flipped, bool isPortal);
 void playerPadJump(Player* player, float velocity);
-void playerRingJump(Player* player, float strength, LevelObject* object);
+void playerRingJump(Player* player, float velocity, LevelObject* object);
 void playerCollideWithObject(Player* player, LevelObject* object, ObjectData* class);
 void playerUpdate(Player* player, float dt);
